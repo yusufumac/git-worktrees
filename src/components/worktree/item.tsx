@@ -55,7 +55,7 @@ export const Item = memo(
       <List.Item
         id={worktree.id}
         key={worktree.branch}
-        icon={Icon.Tree}
+        icon={{source: 'branch.svg'}}
         title={relative(project?.fullPath ?? projectsPath, worktree.path)}
         subtitle={`${worktree.branch ?? "detached"} @ ${currentCommit?.slice(0, 7) ?? "none"}`}
         keywords={worktree.branch ? worktree.branch.split('-') : []}
