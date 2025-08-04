@@ -58,6 +58,7 @@ export const Item = memo(
         icon={Icon.Tree}
         title={relative(project?.fullPath ?? projectsPath, worktree.path)}
         subtitle={`${worktree.branch ?? "detached"} @ ${currentCommit?.slice(0, 7) ?? "none"}`}
+        keywords={worktree.branch ? worktree.branch.split('-') : []}
         accessories={[
           ...(isRunning
             ? [
