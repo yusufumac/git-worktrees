@@ -101,10 +101,7 @@ export const getRepoWorktrees = async (bareDirectory: string): Promise<Worktree[
         dirty: false,
       };
     })
-    .filter(({ path }) => 
-      !path.endsWith(".bare") && 
-      path.toLowerCase().startsWith(bareDirectory.toLowerCase())
-    );
+    .filter(({ path }) => !path.endsWith(".bare") && path.toLowerCase().startsWith(bareDirectory.toLowerCase()));
 
   return batchPromises(worktrees, 25, async (worktree) => ({
     ...worktree,

@@ -95,8 +95,8 @@ export async function findProcessesInDirectory(directory: string): Promise<numbe
     const relevantProcesses: typeof nodeProcesses = [];
 
     for (const proc of nodeProcesses) {
-      // Check if the command includes our directory path
-      if (proc.cmd && proc.cmd.includes(directory)) {
+      // Check if the command includes our directory path (case-insensitive on macOS)
+      if (proc.cmd && proc.cmd.toLowerCase().includes(directory.toLowerCase())) {
         // Verify it's actually a Node.js dev server
         const cmdLower = proc.cmd.toLowerCase();
 
@@ -669,13 +669,13 @@ export async function killAllWorktreeDevServers(worktreePaths: string[], exclude
     for (const proc of allNodeProcesses) {
       if (!proc.cmd) continue;
 
-      // Skip if it's the process we want to keep running
-      if (excludePath && proc.cmd.includes(excludePath)) continue;
+      // Skip if it's the process we want to keep running (case-insensitive on macOS)
+      if (excludePath && proc.cmd.toLowerCase().includes(excludePath.toLowerCase())) continue;
 
-      // Check if this process belongs to any worktree
+      // Check if this process belongs to any worktree (case-insensitive on macOS)
       let belongsToWorktree = false;
       for (const worktreePath of worktreePaths) {
-        if (proc.cmd.includes(worktreePath)) {
+        if (proc.cmd.toLowerCase().includes(worktreePath.toLowerCase())) {
           belongsToWorktree = true;
           break;
         }
@@ -790,9 +790,9 @@ export async function detectExternalProcesses(worktreePaths: string[]): Promise<
         continue;
       }
 
-      // Find which worktree this process belongs to
+      // Find which worktree this process belongs to (case-insensitive on macOS)
       for (const worktreePath of worktreePaths) {
-        if (proc.cmd.includes(worktreePath)) {
+        if (cmdLower.includes(worktreePath.toLowerCase())) {
           if (!result.has(worktreePath)) {
             result.set(worktreePath, []);
           }

@@ -55,7 +55,7 @@ export const Item = memo(
       <List.Item
         id={worktree.id}
         key={worktree.branch}
-        icon={{source: 'branch.svg'}}
+        icon={{ source: "branch.svg" }}
         title={(() => {
           const basePath = project?.fullPath ?? projectsPath;
           // Handle case-insensitive path comparison for macOS
@@ -64,7 +64,7 @@ export const Item = memo(
             : relative(basePath, worktree.path);
         })()}
         subtitle={`${worktree.branch ?? "detached"} @ ${currentCommit?.slice(0, 7) ?? "none"}`}
-        keywords={worktree.branch ? worktree.branch.split('-') : []}
+        keywords={worktree.branch ? worktree.branch.split("-") : []}
         accessories={[
           ...(isRunning
             ? [
