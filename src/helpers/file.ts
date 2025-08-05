@@ -101,7 +101,10 @@ export const getRepoWorktrees = async (bareDirectory: string): Promise<Worktree[
         dirty: false,
       };
     })
-    .filter(({ path }) => !path.endsWith(".bare") && path.startsWith(bareDirectory)); // Filter out bare worktree and worktrees that are not in the bare directory e.g have been manually moved
+    .filter(({ path }) => 
+      !path.endsWith(".bare") && 
+      path.toLowerCase().startsWith(bareDirectory.toLowerCase())
+    );
 
   return batchPromises(worktrees, 25, async (worktree) => ({
     ...worktree,
@@ -111,7 +114,7 @@ export const getRepoWorktrees = async (bareDirectory: string): Promise<Worktree[
 
 export const isWorktreeDirty = async (path: string): Promise<boolean> => {
   try {
-    const { stdout } = await executeCommand(`git -C ${path} status -s`);
+    const { stdout } = await executeCommand(`git -C "${path}" status -s`);
     return stdout.trim().length > 0;
   } catch (e: unknown) {
     console.error({ path, e });
