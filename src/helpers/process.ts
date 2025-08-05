@@ -3,6 +3,7 @@ import { ChildProcess, spawn } from "child_process";
 import { openSync, closeSync } from "fs";
 import { executeCommand } from "./general";
 import find from "find-process";
+import { DEV_SERVER_SUCCESS_MESSAGE, DEV_SERVER_TIMEOUT_MS } from "#/config/constants";
 
 export interface ProcessInfo {
   pid: number;
@@ -812,4 +813,57 @@ export async function detectExternalProcesses(worktreePaths: string[]): Promise<
   }
 
   return result;
+}
+
+// Helper function to check if output contains the success message
+function isSuccessMessage(output: string): boolean {
+  return output.includes(DEV_SERVER_SUCCESS_MESSAGE);
+}
+
+// Start a process and wait for it to be ready
+export async function startProcessAndWaitForReady(
+  worktreePath: string,
+  command: string,
+  args: string[] = [],
+): Promise<{ success: boolean; processInfo?: ProcessInfo; error?: string }> {
+  let processInfo: ProcessInfo | undefined;
+  let resolved = false;
+
+  return new Promise((resolve) => {
+    // Set up timeout
+    const timeout = setTimeout(() => {
+      if (!resolved) {
+        resolved = true;
+        resolve({
+          success: false,
+          processInfo,
+          error: `Process did not start successfully within ${DEV_SERVER_TIMEOUT_MS / 1000} seconds`,
+        });
+      }
+    }, DEV_SERVER_TIMEOUT_MS);
+
+    // Start the process
+    startProcess(worktreePath, command, args, (output) => {
+      // Check if success message appears
+      if (!resolved && processInfo && isSuccessMessage(output.data)) {
+        resolved = true;
+        clearTimeout(timeout);
+        resolve({ success: true, processInfo });
+      }
+    })
+      .then((info) => {
+        processInfo = info;
+        // Process started successfully, now we wait for success message or timeout
+      })
+      .catch((error) => {
+        clearTimeout(timeout);
+        if (!resolved) {
+          resolved = true;
+          resolve({
+            success: false,
+            error: error instanceof Error ? error.message : "Unknown error occurred",
+          });
+        }
+      });
+  });
 }

@@ -1,15 +1,14 @@
-import { Action, Icon, showToast, Toast, useNavigation } from "@raycast/api";
+import { Action, Icon, showToast, Toast } from "@raycast/api";
 import { useViewingWorktreesStore } from "#/stores/viewing-worktrees";
 import {
-  startProcess,
   stopProcess,
   detectExternalProcesses,
   killAllWorktreeDevServers,
   getAllWorktreePaths,
+  startProcessAndWaitForReady,
 } from "#/helpers/process";
 import { withToast } from "#/helpers/toast";
 import { getPreferences } from "#/helpers/raycast";
-import ViewProcessOutput from "../../view-process-output";
 import type { Worktree } from "#/config/types";
 
 interface RunWorktreeProps {
@@ -21,7 +20,6 @@ interface RunWorktreeProps {
 export const RunWorktree = ({ worktree, onProcessStart, onProcessStop }: RunWorktreeProps) => {
   const { setRunningProcess, removeRunningProcess, isWorktreeRunning, updateExternalProcesses } =
     useViewingWorktreesStore();
-  const { push } = useNavigation();
   const isRunning = isWorktreeRunning(worktree.path);
   const preferences = getPreferences();
 
@@ -35,8 +33,8 @@ export const RunWorktree = ({ worktree, onProcessStart, onProcessStop }: RunWork
     try {
       await showToast({
         style: Toast.Style.Animated,
-        title: "Starting Process",
-        message: `Running ${fullCommand} in ${worktree.path}`,
+        title: "Starting Dev Server",
+        message: "Waiting for server to be ready...",
       });
 
       // Get all worktree paths and kill dev servers in them (except current one)
@@ -59,55 +57,48 @@ export const RunWorktree = ({ worktree, onProcessStart, onProcessStop }: RunWork
         }
       }
 
-      const processInfo = await startProcess(worktree.path, command, args);
+      // Start process and wait for it to be ready
+      const result = await startProcessAndWaitForReady(worktree.path, command, args);
 
-      setRunningProcess(worktree.path, processInfo);
-      onProcessStart?.();
+      if (result.success && result.processInfo) {
+        setRunningProcess(worktree.path, result.processInfo);
+        onProcessStart?.();
 
-      // Refresh external process detection immediately
-      setTimeout(async () => {
-        const externalProcesses = await detectExternalProcesses([worktree.path]);
-        updateExternalProcesses(externalProcesses);
-      }, 100); // Small delay to ensure process is fully started
+        // Refresh external process detection immediately
+        setTimeout(async () => {
+          const externalProcesses = await detectExternalProcesses([worktree.path]);
+          updateExternalProcesses(externalProcesses);
+        }, 100);
 
-      // Open the output viewer after process is started
-      push(<ViewProcessOutput worktreePath={worktree.path} />);
+        await showToast({
+          style: Toast.Style.Success,
+          title: "Dev Server Started",
+          message: `${worktree.branch} is now running`,
+        });
+      } else {
+        // Process failed to start or timed out
+        const errorMessage = result.error || "Process failed to start";
 
-      await showToast({
-        style: Toast.Style.Success,
-        title: "Process Started",
-        message: `Running ${fullCommand} in ${worktree.branch}`,
-      });
+        await showToast({
+          style: Toast.Style.Failure,
+          title: "Failed to Start Dev Server",
+          message: errorMessage,
+        });
+
+        // If we have a process info (started but didn't succeed), stop it
+        if (result.processInfo) {
+          try {
+            await stopProcess(worktree.path);
+          } catch {
+            // Ignore error when stopping process
+          }
+        }
+      }
     } catch (error) {
-      // Store error in a temporary process info so it can be displayed
-      const errorInfo = {
-        pid: -1,
-        command: fullCommand,
-        args: [],
-        cwd: worktree.path,
-        startTime: new Date(),
-        outputBuffer: [],
-        errorBuffer: [
-          `Failed to start process: ${error instanceof Error ? error.message : "Unknown error"}`,
-          "",
-          "Command: " + fullCommand,
-          "Directory: " + worktree.path,
-          "",
-          "Error Details:",
-          error instanceof Error ? error.stack || error.message : String(error),
-        ],
-        status: "error" as const,
-      };
-
-      setRunningProcess(worktree.path, errorInfo);
-
-      // Open the output viewer to show the error
-      push(<ViewProcessOutput worktreePath={worktree.path} />);
-
       await showToast({
         style: Toast.Style.Failure,
         title: "Failed to Start Process",
-        message: "Check the output window for details",
+        message: error instanceof Error ? error.message : "Unknown error occurred",
       });
     }
   };
