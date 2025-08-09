@@ -14,4 +14,4 @@ export const TEMP_DIR_PREFIX = "git-worktrees-";
 
 // Dev server related constants
 export const DEV_SERVER_SUCCESS_MESSAGE = "All apps are now running";
-export const DEV_SERVER_TIMEOUT_MS = 30000; // 30 seconds
+export const DEV_SERVER_TIMEOUT_MS = 60000; // 60 seconds
