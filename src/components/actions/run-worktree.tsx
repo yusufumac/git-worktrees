@@ -139,7 +139,7 @@ export const RunWorktree = ({ worktree, onProcessStart, onProcessStop }: RunWork
           onSuccess: () => "Process stopped",
           onFailure: () => "Failed to stop process",
         })}
-        shortcut={{ modifiers: ["cmd", "shift"], key: "s" }}
+        shortcut={{ modifiers: ["cmd"], key: "s" }}
       />
     );
   }
@@ -153,7 +153,7 @@ export const RunWorktree = ({ worktree, onProcessStart, onProcessStop }: RunWork
         onSuccess: () => "Process started",
         onFailure: () => "Failed to start process",
       })}
-      shortcut={{ modifiers: ["cmd", "shift"], key: "r" }}
+      shortcut={{ modifiers: ["cmd"], key: "r" }}
     />
   );
 };

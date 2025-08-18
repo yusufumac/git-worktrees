@@ -20,7 +20,7 @@ export const RenameWorktree = ({ worktree, revalidateProjects }: RenameWorktreeP
     <Action
       title="Rename Worktree"
       icon={Icon.Pencil}
-      shortcut={{ key: "r", modifiers: ["cmd"] }}
+      shortcut={{ key: "e", modifiers: ["cmd"] }}
       onAction={() => push(<RenameForm worktree={worktree} revalidateProjects={revalidateProjects} />)}
     />
   );

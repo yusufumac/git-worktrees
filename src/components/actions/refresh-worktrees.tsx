@@ -10,7 +10,7 @@ export const RefreshWorktrees = ({ revalidate }: { revalidate: () => void }) => 
   return (
     <Action
       title="Refresh"
-      shortcut={{ key: "r", modifiers: ["cmd"] }}
+      shortcut={{ key: "r", modifiers: ["cmd", "shift"] }}
       icon={Icon.ArrowClockwise}
       onAction={withToast({
         action: () => revalidate(),
