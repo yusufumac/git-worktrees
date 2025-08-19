@@ -17,15 +17,32 @@ export const RemoveWorktree = ({
   const { removeRunningProcess } = useViewingWorktreesStore();
 
   const handleRemoveWorktree = async (worktree: Worktree) => {
+    const worktreeName = path.basename(worktree.path);
+    const projectPath = path.dirname(worktree.path);
+    const projectName = path.basename(projectPath);
+
+    // Always show confirmation dialog with worktree details
+    const confirmed = await confirmAlert({
+      title: `Remove Worktree: ${worktreeName}`,
+      message: `Are you sure you want to remove the worktree "${worktreeName}"${
+        worktree.branch ? ` (branch: ${worktree.branch})` : ""
+      }? This action cannot be undone.`,
+    });
+
+    if (!confirmed) {
+      await showToast({
+        style: Toast.Style.Failure,
+        title: "Aborted Removal",
+        message: "The worktree was not removed",
+      });
+      return;
+    }
+
     const toast = await showToast({
       style: Toast.Style.Animated,
       title: "Removing Worktree",
       message: "Please wait while the worktree is being removed",
     });
-
-    const worktreeName = path.basename(worktree.path);
-    const projectPath = path.dirname(worktree.path);
-    const projectName = path.basename(projectPath);
 
     // Check if there's a running dev server in this worktree
     const processInfo = getProcessInfo(worktree.path);
@@ -67,14 +84,14 @@ export const RemoveWorktree = ({
       if (!errorMessage.includes(UNTRACKED_OR_MODIFIED_FILES_ERROR)) throw e;
 
       const confirmed = await confirmAlert({
-        title: "Worktree has unsaved changes",
-        message: "This action cannot be undone, are you sure?",
+        title: `Worktree "${worktreeName}" has unsaved changes`,
+        message: `The worktree contains untracked or modified files. Force removal will permanently delete these changes. Are you absolutely sure you want to continue?`,
       });
 
       if (!confirmed) {
         toast.style = Toast.Style.Failure;
         toast.title = "Aborted Removal";
-        toast.message = "The worktree was not removed";
+        toast.message = "The worktree was not removed due to unsaved changes";
         return;
       }
 
