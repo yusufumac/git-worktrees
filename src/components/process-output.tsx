@@ -2,6 +2,7 @@ import { Detail, ActionPanel, Action, Icon } from "@raycast/api";
 import { useState, useEffect, useRef } from "react";
 import { getProcessInfo, stopProcess } from "#/helpers/process";
 import { useViewingWorktreesStore } from "#/stores/viewing-worktrees";
+import stripAnsi from "strip-ansi";
 
 interface ProcessOutputViewProps {
   worktreePath: string;
@@ -68,13 +69,14 @@ export const ProcessOutputView = ({ worktreePath, onClose }: ProcessOutputViewPr
     navigator.clipboard.writeText(outputText);
   };
 
-  // Process the output to convert ANSI colors to markdown - always show last N lines
+  // Process the output to strip ANSI colors for clean display - always show last N lines
   const processedOutput = output.slice(-DISPLAY_LINES).map((line) => {
-    // Remove the [stdout] or [stderr] prefix for cleaner output
-    return line.replace(/^\[(stdout|stderr)\] /, "");
+    // Remove the [stdout] or [stderr] prefix and strip ANSI codes for cleaner output
+    const cleanLine = line.replace(/^\[(stdout|stderr)\] /, "");
+    return stripAnsi(cleanLine);
   });
 
-  const markdown = `\`\`\`ansi
+  const markdown = `\`\`\`
 ${processedOutput.join("\n") || "Waiting for output..."}
 \`\`\`
 
