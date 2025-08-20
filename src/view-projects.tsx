@@ -1,4 +1,5 @@
 import ClearCache from "#/components/actions/clear-cache";
+import { CopyPath } from "#/components/actions/copy-path";
 import { OpenTerminal } from "#/components/actions/open-terminal";
 import { RemoveProject } from "#/components/actions/remove-project";
 import { ResetRanking } from "#/components/actions/reset-item-ranking";
@@ -50,6 +51,7 @@ export default function Command() {
                   />
 
                   <OpenTerminal path={project.fullPath} />
+                  <CopyPath path={project.fullPath} />
                 </ActionPanel.Section>
 
                 <ActionPanel.Section title="Extra Actions">

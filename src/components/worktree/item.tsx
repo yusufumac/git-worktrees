@@ -1,4 +1,5 @@
 import ClearCache from "#/components/actions/clear-cache";
+import { CopyPath } from "#/components/actions/copy-path";
 import { OpenEditor } from "#/components/actions/open-editor";
 import { OpenTerminal } from "#/components/actions/open-terminal";
 import { RefreshWorktrees } from "#/components/actions/refresh-worktrees";
@@ -87,6 +88,7 @@ export const Item = memo(
                 }}
               />
               <OpenTerminal path={worktree.path} />
+              <CopyPath path={worktree.path} />
 
               <RunWorktree worktree={worktree} onProcessStart={revalidateProjects} onProcessStop={revalidateProjects} />
 
