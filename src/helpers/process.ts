@@ -78,18 +78,18 @@ async function getStoredProcesses(): Promise<Record<string, StoredProcessData>> 
   try {
     const stored = await LocalStorage.getItem<string>(PROCESS_STORAGE_KEY);
     if (!stored) return {};
-    
+
     const data = JSON.parse(stored);
     // Handle legacy format (just PIDs)
-    if (typeof Object.values(data)[0] === 'number') {
+    if (typeof Object.values(data)[0] === "number") {
       // Convert legacy format to new format
       const converted: Record<string, StoredProcessData> = {};
       for (const [path, pid] of Object.entries(data)) {
         converted[path] = {
           pid: pid as number,
-          command: 'unknown',
+          command: "unknown",
           args: [],
-          startTime: new Date().toISOString()
+          startTime: new Date().toISOString(),
         };
       }
       return converted;
@@ -548,7 +548,7 @@ async function restoreProcessFromStorage(worktreePath: string, data: StoredProce
   // Check if files still exist
   let hasOutputFile = false;
   let hasErrorFile = false;
-  
+
   if (data.outputFile) {
     try {
       const { stdout } = await executeCommand(`test -f "${data.outputFile}" && echo "exists"`);
@@ -557,7 +557,7 @@ async function restoreProcessFromStorage(worktreePath: string, data: StoredProce
       hasOutputFile = false;
     }
   }
-  
+
   if (data.errorFile) {
     try {
       const { stdout } = await executeCommand(`test -f "${data.errorFile}" && echo "exists"`);
@@ -566,35 +566,35 @@ async function restoreProcessFromStorage(worktreePath: string, data: StoredProce
       hasErrorFile = false;
     }
   }
-  
+
   // If we have at least one log file, restore the process
   if (hasOutputFile || hasErrorFile) {
     const outputBuffer = new CircularBuffer<string>(MAX_OUTPUT_LINES);
     const errorBuffer = new CircularBuffer<string>(MAX_OUTPUT_LINES);
-    
+
     // Read existing content from files
     if (hasOutputFile && data.outputFile) {
       try {
         const { stdout } = await executeCommand(`tail -n 1000 "${data.outputFile}"`);
-        stdout.split('\n').forEach(line => {
+        stdout.split("\n").forEach((line) => {
           if (line.trim()) outputBuffer.push(line);
         });
       } catch {
         // Ignore errors reading file
       }
     }
-    
+
     if (hasErrorFile && data.errorFile) {
       try {
         const { stdout } = await executeCommand(`tail -n 1000 "${data.errorFile}"`);
-        stdout.split('\n').forEach(line => {
+        stdout.split("\n").forEach((line) => {
           if (line.trim()) errorBuffer.push(line);
         });
       } catch {
         // Ignore errors reading file
       }
     }
-    
+
     const info: ProcessInfo = {
       pid: data.pid,
       command: data.command,
@@ -607,17 +607,17 @@ async function restoreProcessFromStorage(worktreePath: string, data: StoredProce
       outputFile: data.outputFile,
       errorFile: data.errorFile,
     };
-    
+
     // Set up tail processes to continue reading output
     if (hasOutputFile && data.outputFile) {
       const tailStdout = spawn("tail", ["-f", data.outputFile], {
         stdio: ["ignore", "pipe", "pipe"],
       });
-      
+
       tailStdout.stdout?.on("data", (data: Buffer) => {
         const text = data.toString();
         const lines = text.split("\n");
-        
+
         lines.forEach((line: string) => {
           if (line.trim()) {
             outputBuffer.push(line);
@@ -626,16 +626,16 @@ async function restoreProcessFromStorage(worktreePath: string, data: StoredProce
         info.outputBuffer = outputBuffer.toArray();
       });
     }
-    
+
     if (hasErrorFile && data.errorFile) {
       const tailStderr = spawn("tail", ["-f", data.errorFile], {
         stdio: ["ignore", "pipe", "pipe"],
       });
-      
+
       tailStderr.stdout?.on("data", (data: Buffer) => {
         const text = data.toString();
         const lines = text.split("\n");
-        
+
         lines.forEach((line: string) => {
           if (line.trim()) {
             errorBuffer.push(line);
@@ -644,10 +644,10 @@ async function restoreProcessFromStorage(worktreePath: string, data: StoredProce
         info.errorBuffer = errorBuffer.toArray();
       });
     }
-    
+
     // Store in running processes map (without ChildProcess since it's detached)
     runningProcesses.set(worktreePath, { process: {} as ChildProcess, info });
-    
+
     // Monitor the process
     const monitorProcess = setInterval(async () => {
       const isRunning = await isProcessRunning(data.pid);
