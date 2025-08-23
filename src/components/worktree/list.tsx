@@ -2,8 +2,10 @@ import type { BareRepository, Worktree } from "#/config/types";
 import { getPreferences } from "#/helpers/raycast";
 import { useViewingWorktreesStore } from "#/stores/viewing-worktrees";
 import { useFrecencySorting } from "@raycast/utils";
-import { memo } from "react";
+import { memo, useState } from "react";
 import { Item } from "./item";
+
+export type WorktreeSortOrder = "default" | "creation_desc" | "creation_asc";
 
 export const List = memo(
   ({
@@ -19,6 +21,7 @@ export const List = memo(
   }) => {
     const { enableWorktreesFrequencySorting } = getPreferences();
     const { isWorktreeRunning } = useViewingWorktreesStore();
+    const [sortOrder, setSortOrder] = useState<WorktreeSortOrder>("default");
 
     let worktrees = incomingWorktrees;
     let visitWorktree: ((item: Worktree) => Promise<void>) | undefined;
@@ -37,6 +40,24 @@ export const List = memo(
       worktrees = sortedWorktrees;
       visitWorktree = visitItem;
       resetWorktreeRanking = resetRanking;
+    } else if (sortOrder && sortOrder !== "default") {
+      // Apply creation date sorting when frecency sorting is disabled
+      worktrees = [...worktrees].sort((a, b) => {
+        // If creation dates are not available, fall back to alphabetical
+        if (!a.createdAt || !b.createdAt) {
+          return a.id.localeCompare(b.id);
+        }
+
+        if (sortOrder === "creation_desc") {
+          // Newest first
+          return b.createdAt - a.createdAt;
+        } else if (sortOrder === "creation_asc") {
+          // Oldest first
+          return a.createdAt - b.createdAt;
+        }
+
+        return 0;
+      });
     }
 
     // Sort worktrees to put running processes at the top
@@ -64,6 +85,8 @@ export const List = memo(
               : undefined
           }
           revalidateProjects={revalidateProjects}
+          sortOrder={sortOrder}
+          setSortOrder={setSortOrder}
         />
       );
     });

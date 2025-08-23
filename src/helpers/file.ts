@@ -106,8 +106,21 @@ export const getRepoWorktrees = async (bareDirectory: string): Promise<Worktree[
   return batchPromises(worktrees, 25, async (worktree) => ({
     ...worktree,
     dirty: await isWorktreeDirty(worktree.path),
+    createdAt: await getWorktreeCreationTime(worktree.path),
   }));
 };
+
+async function getWorktreeCreationTime(path: string): Promise<number | undefined> {
+  try {
+    // On macOS, use stat -f "%B" to get birth time
+    const { stdout } = await executeCommand(`stat -f "%B" "${path}"`);
+    const timestamp = parseInt(stdout.trim(), 10);
+    return isNaN(timestamp) ? undefined : timestamp * 1000; // Convert to milliseconds
+  } catch {
+    // Fallback to undefined if we can't get the creation time
+    return undefined;
+  }
+}
 
 export const isWorktreeDirty = async (path: string): Promise<boolean> => {
   try {

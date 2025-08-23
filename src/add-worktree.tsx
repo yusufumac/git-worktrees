@@ -242,7 +242,7 @@ export default function Command({ directory: initialDirectory }: { directory?: s
 
   const handleWorktreeNameOnChange = (text: string) => {
     const newWorktreeName = prefixesToRemove.reduce(
-      (text, prefix) => (text.startsWith(prefix) ? text.slice(prefix.length + 1) : text).trim(),
+      (text: string, prefix: string) => (text.startsWith(prefix) ? text.slice(prefix.length + 1) : text).trim(),
       text,
     );
 

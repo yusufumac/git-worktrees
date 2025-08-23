@@ -9,6 +9,7 @@ import { RenameWorktree } from "#/components/actions/rename-worktree";
 import { ResetRanking } from "#/components/actions/reset-ranking";
 import { RunWorktree } from "#/components/actions/run-worktree";
 import type { BareRepository, Worktree } from "#/config/types";
+import type { WorktreeSortOrder } from "./list";
 import { getPreferences } from "#/helpers/raycast";
 import { useBranchInformation } from "#/hooks/use-branch-information";
 import { useWorktreeProcessStatus } from "#/hooks/use-process-monitor";
@@ -27,12 +28,16 @@ export const Item = memo(
     rankBareRepository,
     rankWorktree,
     revalidateProjects,
+    sortOrder,
+    setSortOrder,
   }: {
     project?: BareRepository;
     worktree: Worktree;
     rankBareRepository?: (key: "increment" | "reset") => void;
     rankWorktree?: (key: "increment" | "reset") => void;
     revalidateProjects: () => void;
+    sortOrder?: WorktreeSortOrder;
+    setSortOrder?: (order: WorktreeSortOrder) => void;
   }) => {
     const selectedWorktree = useViewingWorktreesStore((state) => state.selectedWorktree);
 
@@ -76,6 +81,14 @@ export const Item = memo(
               ]
             : []),
           ...(isDirty ? [{ text: { value: "U", color: Color.Yellow }, tooltip: "Unsaved Changes" }] : []),
+          ...(sortOrder && sortOrder.startsWith("creation_") && worktree.createdAt
+            ? [
+                {
+                  text: new Date(worktree.createdAt).toLocaleDateString(),
+                  tooltip: `Created: ${new Date(worktree.createdAt).toLocaleString()}`,
+                },
+              ]
+            : []),
           ...(gitRemote?.icon ? [{ icon: gitRemote.icon, tooltip: gitRemote.host }] : []),
         ]}
         actions={
@@ -127,6 +140,26 @@ export const Item = memo(
             </ActionPanel.Section>
 
             <ActionPanel.Section title="Extra Actions">
+              {setSortOrder && (
+                <ActionPanel.Submenu title="Sort Worktrees" icon={Icon.ArrowUp}>
+                  <Action
+                    title="Default (Alphabetical)"
+                    icon={sortOrder === "default" ? Icon.Checkmark : undefined}
+                    onAction={() => setSortOrder("default")}
+                  />
+                  <Action
+                    title="Creation Date (Newest First)"
+                    icon={sortOrder === "creation_desc" ? Icon.Checkmark : undefined}
+                    onAction={() => setSortOrder("creation_desc")}
+                  />
+                  <Action
+                    title="Creation Date (Oldest First)"
+                    icon={sortOrder === "creation_asc" ? Icon.Checkmark : undefined}
+                    onAction={() => setSortOrder("creation_asc")}
+                  />
+                </ActionPanel.Submenu>
+              )}
+
               <RefreshWorktrees revalidate={revalidateProjects} />
 
               <ClearCache revalidateProjects={revalidateProjects} />

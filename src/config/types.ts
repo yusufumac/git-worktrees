@@ -19,6 +19,7 @@ export type Worktree = {
   commit: string | null;
   branch: string | null;
   dirty: boolean;
+  createdAt?: number;
 };
 
 export type Project = BareRepository & {
