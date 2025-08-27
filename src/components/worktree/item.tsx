@@ -143,11 +143,6 @@ export const Item = memo(
               {setSortOrder && (
                 <ActionPanel.Submenu title="Sort Worktrees" icon={Icon.ArrowUp}>
                   <Action
-                    title="Default (Alphabetical)"
-                    icon={sortOrder === "default" ? Icon.Checkmark : undefined}
-                    onAction={() => setSortOrder("default")}
-                  />
-                  <Action
                     title="Creation Date (Newest First)"
                     icon={sortOrder === "creation_desc" ? Icon.Checkmark : undefined}
                     onAction={() => setSortOrder("creation_desc")}
@@ -156,6 +151,11 @@ export const Item = memo(
                     title="Creation Date (Oldest First)"
                     icon={sortOrder === "creation_asc" ? Icon.Checkmark : undefined}
                     onAction={() => setSortOrder("creation_asc")}
+                  />
+                  <Action
+                    title="Alphabetical"
+                    icon={sortOrder === "default" ? Icon.Checkmark : undefined}
+                    onAction={() => setSortOrder("default")}
                   />
                 </ActionPanel.Submenu>
               )}

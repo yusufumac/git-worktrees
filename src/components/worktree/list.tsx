@@ -21,7 +21,7 @@ export const List = memo(
   }) => {
     const { enableWorktreesFrequencySorting } = getPreferences();
     const { isWorktreeRunning } = useViewingWorktreesStore();
-    const [sortOrder, setSortOrder] = useState<WorktreeSortOrder>("default");
+    const [sortOrder, setSortOrder] = useState<WorktreeSortOrder>("creation_desc");
 
     let worktrees = incomingWorktrees;
     let visitWorktree: ((item: Worktree) => Promise<void>) | undefined;
