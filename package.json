@@ -253,8 +253,17 @@
     },
     {
       "type": "textfield",
-      "name": "defaultRunCommand",
-      "title": "Default Run Command",
+      "name": "setupScript",
+      "title": "Setup Script",
+      "description": "Command to run after creating a worktree (e.g., 'pnpm install', 'npm ci', 'yarn install')",
+      "required": false,
+      "default": "",
+      "placeholder": "pnpm install"
+    },
+    {
+      "type": "textfield",
+      "name": "runScript",
+      "title": "Run Script",
       "description": "The full command to run dev servers (e.g., 'pnpm run dev', 'npm start', 'yarn dev')",
       "required": false,
       "default": "pnpm run dev",

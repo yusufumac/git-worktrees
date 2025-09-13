@@ -24,7 +24,7 @@ export const RunWorktree = ({ worktree, onProcessStart, onProcessStop }: RunWork
   const preferences = getPreferences();
 
   // Get full command from preferences and parse it
-  const fullCommand = preferences.defaultRunCommand || "pnpm run dev";
+  const fullCommand = preferences.runScript || "pnpm run dev";
   const commandParts = fullCommand.trim().split(/\s+/);
   const command = commandParts[0];
   const args = commandParts.slice(1);

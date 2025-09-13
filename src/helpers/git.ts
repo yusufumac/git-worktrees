@@ -347,6 +347,29 @@ export const pullBranchChanges = async ({ path }: { path: string }) => {
   }
 };
 
+export const runSetupScript = async (worktreePath: string) => {
+  const preferences = getPreferences();
+  const setupScript = preferences.setupScript?.trim();
+
+  if (!setupScript) return;
+
+  // Import the startProcess function from process.ts which handles command resolution
+  const { startProcess } = await import("./process");
+
+  // Parse the command just like runScript does
+  const commandParts = setupScript.split(/\s+/);
+  const command = commandParts[0];
+  const args = commandParts.slice(1);
+
+  // Use startProcess which handles all the command path resolution
+  try {
+    await startProcess(worktreePath, command, args);
+    // Just start the process and return immediately - don't wait for it to finish
+  } catch (e: unknown) {
+    throw Error(`Setup script failed to start: ${e instanceof Error ? e.message : "Unknown error occurred"}`);
+  }
+};
+
 export const addRemoteWorktree = async ({
   remoteBranch,
   newWorktreePath,
@@ -359,6 +382,9 @@ export const addRemoteWorktree = async ({
   try {
     const worktreeAddCommand = `git -C ${parentPath} worktree add --track -B ${remoteBranch} ${newWorktreePath} origin/${remoteBranch}`;
     await executeCommand(worktreeAddCommand);
+
+    // Run setup script after creating worktree
+    await runSetupScript(newWorktreePath);
   } catch (e: unknown) {
     throw Error(e instanceof Error ? e.message : "Unknown error occurred");
   }
@@ -379,6 +405,9 @@ export const addNewWorktree = async ({
     const addCommand = `git -C ${parentPath} worktree add --track -B ${newBranch} ${newWorktreePath} origin/${trackingBranch}`;
 
     await executeCommand(addCommand);
+
+    // Run setup script after creating worktree
+    await runSetupScript(newWorktreePath);
   } catch (e: unknown) {
     throw Error(e instanceof Error ? e.message : "Unknown error occurred");
   }
