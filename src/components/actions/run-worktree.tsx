@@ -132,14 +132,14 @@ export const RunWorktree = ({ worktree, onProcessStart, onProcessStop }: RunWork
   if (isRunning) {
     return (
       <Action
-        title="Stop Process"
+        title="Stop Dev Server"
         icon={Icon.Stop}
         onAction={withToast({
           action: handleStop,
           onSuccess: () => "Process stopped",
           onFailure: () => "Failed to stop process",
         })}
-        shortcut={{ modifiers: ["cmd"], key: "s" }}
+        shortcut={{ modifiers: ["cmd"], key: "r" }}
       />
     );
   }
@@ -153,7 +153,7 @@ export const RunWorktree = ({ worktree, onProcessStart, onProcessStop }: RunWork
         onSuccess: () => "Process started",
         onFailure: () => "Failed to start process",
       })}
-      shortcut={{ modifiers: ["cmd"], key: "s" }}
+      shortcut={{ modifiers: ["cmd"], key: "r" }}
     />
   );
 };
