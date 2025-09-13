@@ -107,7 +107,15 @@ export const RemoveWorktree = ({
     toast.title = "Worktree Removed";
     toast.message = "The worktree has been removed";
 
-    removeWorktreeFromCache({ projectName, worktreeId: worktree.id, onSuccess: revalidateProjects });
+    // Update cache and refresh the list
+    removeWorktreeFromCache({
+      projectName,
+      worktreeId: worktree.id,
+      onSuccess: () => {
+        // Revalidate projects to refresh the UI
+        revalidateProjects();
+      },
+    });
   };
 
   return (

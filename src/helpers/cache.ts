@@ -34,7 +34,7 @@ export const removeWorktreeFromCache = ({
 
   const { enableWorktreeCaching } = getPreferences();
 
-  if (!enableWorktreeCaching) return;
+  if (!enableWorktreeCaching) return onSuccess?.();
   if (!cache.has(CACHE_KEYS.WORKTREES)) return onSuccess?.();
 
   const projects = JSON.parse(cache.get(CACHE_KEYS.WORKTREES) as string) as Project[];
@@ -53,7 +53,7 @@ export const removeProjectFromCache = ({ projectName, onSuccess }: { projectName
 
   const { enableWorktreeCaching } = getPreferences();
 
-  if (!enableWorktreeCaching) return;
+  if (!enableWorktreeCaching) return onSuccess?.();
   if (!cache.has(CACHE_KEYS.WORKTREES)) return onSuccess?.();
 
   const projects = JSON.parse(cache.get(CACHE_KEYS.WORKTREES) as string) as Project[];
