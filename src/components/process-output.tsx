@@ -1,7 +1,6 @@
 import { Detail, ActionPanel, Action, Icon } from "@raycast/api";
 import { useState, useEffect, useRef } from "react";
 import { getProcessInfo, stopProcess } from "#/helpers/process";
-import { useViewingWorktreesStore } from "#/stores/viewing-worktrees";
 import stripAnsi from "strip-ansi";
 
 interface ProcessOutputViewProps {
@@ -16,7 +15,6 @@ export const ProcessOutputView = ({ worktreePath, onClose }: ProcessOutputViewPr
 
   // Display last 500 lines
   const DISPLAY_LINES = 500;
-  const { removeRunningProcess } = useViewingWorktreesStore();
 
   useEffect(() => {
     // Load initial output from process info
@@ -60,7 +58,6 @@ export const ProcessOutputView = ({ worktreePath, onClose }: ProcessOutputViewPr
 
   const handleStop = async () => {
     await stopProcess(worktreePath);
-    removeRunningProcess(worktreePath);
     setProcessStatus("stopped");
   };
 

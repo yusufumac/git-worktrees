@@ -1,12 +1,10 @@
 import ClearCache from "#/components/actions/clear-cache";
 import { getPreferences } from "#/helpers/raycast";
-import { useDebounce } from "#/hooks/use-debounce";
 import { useProjects } from "#/hooks/use-projects";
-import { useProcessMonitor } from "#/hooks/use-process-monitor";
-import { useViewingWorktreesStore } from "#/stores/viewing-worktrees";
+import { cleanupOrphanedProcesses } from "#/helpers/process";
 import { Action, ActionPanel, Icon, List, openExtensionPreferences } from "@raycast/api";
 import { relative } from "node:path";
-import { useMemo } from "react";
+import { useMemo, useEffect } from "react";
 import AddWorktree from "./add-worktree";
 import CloneProject from "./clone-project";
 import { DirectoriesDropdown, useDirectory } from "./components/actions/directories-dropdown";
@@ -18,9 +16,6 @@ export default function Command({ projectId }: { projectId?: string }) {
   const { directory } = useDirectory();
 
   const preferences = getPreferences();
-
-  const updateSelectedWorktree = useViewingWorktreesStore((state) => state.updateSelectedWorktree);
-  const handleOnSelectionChange = useDebounce((worktreePath) => updateSelectedWorktree(worktreePath ?? undefined));
 
   const {
     projects: incomingProjects,
@@ -44,12 +39,12 @@ export default function Command({ projectId }: { projectId?: string }) {
     return [projects, worktrees];
   }, [directory, incomingProjects, preferences.enableProjectsFrequencySorting, enableWorktreesGrouping]);
 
-  // Monitor processes for all worktrees
-  const allWorktrees = useMemo(() => {
-    return incomingProjects?.flatMap((p) => p.worktrees) || [];
-  }, [incomingProjects]);
-
-  useProcessMonitor({ worktrees: allWorktrees, enabled: true });
+  // Clean up orphaned processes on mount
+  useEffect(() => {
+    cleanupOrphanedProcesses().catch(() => {
+      // Silent error
+    });
+  }, []);
 
   if (projectId) {
     const project = incomingProjects?.find((p) => p.id === projectId);
@@ -87,11 +82,7 @@ export default function Command({ projectId }: { projectId?: string }) {
     );
 
   return (
-    <List
-      isLoading={isLoadingProjects}
-      searchBarAccessory={projects && <DirectoriesDropdown projects={projects} />}
-      onSelectionChange={handleOnSelectionChange}
-    >
+    <List isLoading={isLoadingProjects} searchBarAccessory={projects && <DirectoriesDropdown projects={projects} />}>
       {enableWorktreesGrouping ? (
         directory &&
         (groupedOrUngroupedWorktrees as Project[]).length === 1 &&

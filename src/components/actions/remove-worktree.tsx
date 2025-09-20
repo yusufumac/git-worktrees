@@ -2,8 +2,7 @@ import { UNTRACKED_OR_MODIFIED_FILES_ERROR } from "#/config/constants";
 import { Worktree } from "#/config/types";
 import { removeWorktreeFromCache } from "#/helpers/cache";
 import { pruneWorktrees, removeBranch, removeWorktree } from "#/helpers/git";
-import { stopProcess, getProcessInfo, killProcessesInDirectory } from "#/helpers/process";
-import { useViewingWorktreesStore } from "#/stores/viewing-worktrees";
+import { stopProcess, getProcessInfo } from "#/helpers/process";
 import { Action, confirmAlert, Icon, showToast, Toast } from "@raycast/api";
 import path from "node:path";
 
@@ -14,8 +13,6 @@ export const RemoveWorktree = ({
   worktree: Worktree;
   revalidateProjects: () => void;
 }) => {
-  const { removeRunningProcess } = useViewingWorktreesStore();
-
   const handleRemoveWorktree = async (worktree: Worktree) => {
     const worktreeName = path.basename(worktree.path);
     const projectPath = path.dirname(worktree.path);
@@ -52,24 +49,12 @@ export const RemoveWorktree = ({
 
       try {
         await stopProcess(worktree.path);
-        // Remove from store
-        removeRunningProcess(worktree.path);
         // Small delay to ensure process is fully stopped
         await new Promise((resolve) => setTimeout(resolve, 500));
       } catch (error) {
         console.error("Failed to stop dev server:", error);
         // Continue with removal even if stopping fails
       }
-    }
-
-    // Also kill any external processes that might be running in this directory
-    try {
-      await killProcessesInDirectory(worktree.path);
-      // Remove from store in case there were external processes
-      removeRunningProcess(worktree.path);
-    } catch (error) {
-      console.error("Failed to kill external processes:", error);
-      // Continue with removal even if killing external processes fails
     }
 
     try {

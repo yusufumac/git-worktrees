@@ -1,9 +1,10 @@
-import { LocalStorage } from "@raycast/api";
 import { ChildProcess, spawn } from "child_process";
 import { openSync, closeSync } from "fs";
 import { executeCommand } from "./general";
-import find from "find-process";
-import { DEV_SERVER_SUCCESS_MESSAGE, DEV_SERVER_TIMEOUT_MS } from "#/config/constants";
+import { deallocateHost } from "./host-manager";
+import { getUserShell, buildCommandWithProfile } from "./shell";
+import { DEV_SERVER_SUCCESS_MESSAGE } from "#/config/constants";
+import useProcessStore, { type StoredProcessData } from "#/stores/process-store";
 
 export interface ProcessInfo {
   pid: number;
@@ -24,7 +25,6 @@ export interface ProcessOutput {
   timestamp: Date;
 }
 
-const PROCESS_STORAGE_KEY = "worktree-processes";
 const MAX_OUTPUT_LINES = 50000; // Increased buffer size for more output
 
 // Map to store running processes in memory
@@ -63,46 +63,26 @@ class CircularBuffer<T> {
   }
 }
 
-// Stored process data structure
-interface StoredProcessData {
-  pid: number;
-  command: string;
-  args: string[];
-  outputFile?: string;
-  errorFile?: string;
-  startTime: string;
-}
+// StoredProcessData type is imported from the store
 
-// Get stored process data from LocalStorage
+// Get stored process data from the store
 async function getStoredProcesses(): Promise<Record<string, StoredProcessData>> {
-  try {
-    const stored = await LocalStorage.getItem<string>(PROCESS_STORAGE_KEY);
-    if (!stored) return {};
-
-    const data = JSON.parse(stored);
-    // Handle legacy format (just PIDs)
-    if (typeof Object.values(data)[0] === "number") {
-      // Convert legacy format to new format
-      const converted: Record<string, StoredProcessData> = {};
-      for (const [path, pid] of Object.entries(data)) {
-        converted[path] = {
-          pid: pid as number,
-          command: "unknown",
-          args: [],
-          startTime: new Date().toISOString(),
-        };
-      }
-      return converted;
-    }
-    return data;
-  } catch {
-    return {};
+  const store = useProcessStore.getState();
+  // Ensure store is initialized
+  if (!store.isInitialized) {
+    await store.initializeStore();
   }
+  return store.getStoredProcesses();
 }
 
-// Store process data in LocalStorage
+// Store process data using the store
 async function storeProcesses(processes: Record<string, StoredProcessData>): Promise<void> {
-  await LocalStorage.setItem(PROCESS_STORAGE_KEY, JSON.stringify(processes));
+  const store = useProcessStore.getState();
+  // Ensure store is initialized
+  if (!store.isInitialized) {
+    await store.initializeStore();
+  }
+  await store.updateProcesses(processes);
 }
 
 // Check if a process is still running
@@ -115,90 +95,70 @@ async function isProcessRunning(pid: number): Promise<boolean> {
   }
 }
 
-// Find processes running in a specific directory
-export async function findProcessesInDirectory(directory: string): Promise<number[]> {
+// Get all child PIDs of a process
+async function getChildPids(parentPid: number): Promise<number[]> {
   try {
-    // Find only processes named "node"
-    const nodeProcesses = await find("name", "node");
-
-    // Filter processes that are related to our directory
-    const relevantProcesses: typeof nodeProcesses = [];
-
-    for (const proc of nodeProcesses) {
-      // Check if the command includes our directory path (case-insensitive on macOS)
-      if (proc.cmd && proc.cmd.toLowerCase().includes(directory.toLowerCase())) {
-        // Verify it's actually a Node.js dev server
-        const cmdLower = proc.cmd.toLowerCase();
-
-        // Exclude known non-server tools
-        const isExcluded =
-          cmdLower.includes("biome") ||
-          cmdLower.includes("eslint") ||
-          cmdLower.includes("prettier") ||
-          cmdLower.includes("typescript-language-server") ||
-          cmdLower.includes("tsserver") ||
-          cmdLower.includes("copilot") ||
-          cmdLower.includes("visual studio code") ||
-          cmdLower.includes("code helper") ||
-          cmdLower.includes("lsp") ||
-          cmdLower.includes("language-server") ||
-          cmdLower.includes("/typescript/lib/") || // TypeScript lib files
-          cmdLower.includes("typingsinstaller");
-
-        // Check if it's a dev server
-        const isDevServer =
-          !isExcluded &&
-          (cmdLower.includes("dev") ||
-            cmdLower.includes("start") ||
-            cmdLower.includes("serve") ||
-            cmdLower.includes("watch") ||
-            cmdLower.includes("webpack") ||
-            cmdLower.includes("vite") ||
-            cmdLower.includes("next") ||
-            cmdLower.includes("localhost") ||
-            cmdLower.includes(":3000") ||
-            cmdLower.includes(":4000") ||
-            cmdLower.includes(":5000") ||
-            cmdLower.includes(":8000") ||
-            cmdLower.includes(":8080"));
-
-        // Only include if it's a dev server
-        if (isDevServer) {
-          relevantProcesses.push(proc);
-        }
-      }
-    }
-
-    const relevantPids = relevantProcesses.map((p) => p.pid);
-    return relevantPids;
-  } catch (error) {
-    console.error("[Process] Error finding processes:", error);
+    // Use pgrep to find all processes whose parent is the given PID
+    const { stdout } = await executeCommand(`pgrep -P ${parentPid}`);
+    return stdout
+      .split("\n")
+      .filter(Boolean)
+      .map((pid) => parseInt(pid, 10))
+      .filter((pid) => !isNaN(pid));
+  } catch {
+    // No children found or pgrep not available
     return [];
   }
 }
 
-// Kill a process by PID
-export async function killProcess(pid: number, force = false): Promise<void> {
-  try {
-    await executeCommand(`kill ${force ? "-9" : "-15"} ${pid}`);
-  } catch (error) {
-    if (force) {
-      throw error;
-    }
-    // If gentle kill fails, try force kill
-    await killProcess(pid, true);
+// Recursively get all descendant PIDs
+async function getAllDescendantPids(pid: number): Promise<number[]> {
+  const children = await getChildPids(pid);
+  const allPids = [...children];
+
+  // Recursively get children of children
+  for (const childPid of children) {
+    const descendants = await getAllDescendantPids(childPid);
+    allPids.push(...descendants);
   }
+
+  return allPids;
 }
 
-// Kill all processes in a directory
-export async function killProcessesInDirectory(directory: string): Promise<void> {
-  const pids = await findProcessesInDirectory(directory);
+// Kill a process by PID (and all its children)
+export async function killProcess(pid: number, force = false): Promise<void> {
+  try {
+    // First, get all child processes
+    const childPids = await getAllDescendantPids(pid);
 
-  for (const pid of pids) {
+    // Kill children first (bottom-up to avoid orphans)
+    for (const childPid of childPids.reverse()) {
+      try {
+        await executeCommand(`kill ${force ? "-9" : "-15"} ${childPid}`);
+      } catch {
+        // Child might already be dead
+      }
+    }
+
+    // Then kill the parent
+    await executeCommand(`kill ${force ? "-9" : "-15"} ${pid}`);
+  } catch {
+    // If the structured approach fails, try alternative methods
     try {
-      await killProcess(pid);
-    } catch (error) {
-      console.error(`Failed to kill process ${pid}:`, error);
+      // Try killing the process group
+      await executeCommand(`kill ${force ? "-9" : "-15"} -- -${pid}`);
+    } catch {
+      // If that fails too, try pkill
+      try {
+        await executeCommand(`pkill -P ${pid}`); // Kill children
+        await executeCommand(`kill ${force ? "-9" : "-15"} ${pid}`); // Kill parent
+      } catch {
+        if (!force) {
+          // If gentle kill fails, try force kill
+          await killProcess(pid, true);
+        }
+        // Process might already be gone
+      }
     }
   }
 }
@@ -209,6 +169,7 @@ export async function startProcess(
   command: string,
   args: string[] = [],
   onOutput?: (output: ProcessOutput) => void,
+  host?: string,
 ): Promise<ProcessInfo> {
   // Invalidate cache when starting a process
   invalidateProcessCache();
@@ -225,7 +186,7 @@ export async function startProcess(
 
   // Check if package.json exists (for npm/pnpm/yarn commands)
   const baseCommand = command.split("/").pop() || command;
-  if (["npm", "pnpm", "yarn"].includes(baseCommand)) {
+  if (["npm", "pnpm", "yarn", "bun", "turbo", "nx"].includes(baseCommand)) {
     try {
       const { stdout: pkgCheck } = await executeCommand(`test -f "${worktreePath}/package.json" && echo "exists"`);
       if (pkgCheck.trim() !== "exists") {
@@ -233,102 +194,6 @@ export async function startProcess(
       }
     } catch {
       throw new Error(`No package.json found in ${worktreePath}. This doesn't appear to be a Node.js project.`);
-    }
-  }
-
-  // Check if command is available and get full path
-  let commandPath = command;
-
-  // First check if the command is already a full path
-  if (command.startsWith("/")) {
-    try {
-      const { stdout: exists } = await executeCommand(`test -x "${command}" && echo "exists"`);
-      if (exists.trim() === "exists") {
-        commandPath = command;
-      } else {
-        throw new Error(`Command not found at path: ${command}`);
-      }
-    } catch {
-      throw new Error(`Command not found at path: ${command}`);
-    }
-  } else {
-    try {
-      // Try with standard which
-      const { stdout: cmdCheck } = await executeCommand(`which ${command}`);
-      commandPath = cmdCheck.trim();
-    } catch {
-      // Try common paths for package managers
-      const commonPaths = [
-        `/usr/local/bin/${command}`,
-        `/opt/homebrew/bin/${command}`,
-        `$HOME/.npm/bin/${command}`,
-        `$HOME/.yarn/bin/${command}`,
-        `$HOME/.pnpm/${command}`,
-        `/usr/bin/${command}`,
-        `/bin/${command}`,
-        // nvm paths
-        `$HOME/.nvm/versions/node/*/bin/${command}`,
-        // fnm paths
-        `$HOME/.fnm/node-versions/*/installation/bin/${command}`,
-        `$HOME/Library/Application Support/fnm/node-versions/*/installation/bin/${command}`,
-        // volta paths
-        `$HOME/.volta/bin/${command}`,
-        // asdf paths
-        `$HOME/.asdf/installs/nodejs/*/bin/${command}`,
-      ];
-
-      let found = false;
-
-      for (const path of commonPaths) {
-        try {
-          const expandedPath = path.replace("$HOME", process.env.HOME || "");
-
-          // For paths with wildcards, use find
-          if (expandedPath.includes("*")) {
-            const dir = expandedPath.substring(0, expandedPath.lastIndexOf("/"));
-            const pattern = expandedPath.substring(expandedPath.lastIndexOf("/") + 1);
-            const { stdout: findResult } = await executeCommand(
-              `find "${dir}" -name "${pattern}" -type f -executable 2>/dev/null | head -1`,
-            );
-            if (findResult.trim()) {
-              commandPath = findResult.trim();
-              found = true;
-              break;
-            }
-          } else {
-            // For exact paths, use test
-            const { stdout: exists } = await executeCommand(`test -x "${expandedPath}" && echo "exists"`);
-            if (exists.trim() === "exists") {
-              commandPath = expandedPath;
-              found = true;
-              break;
-            }
-          }
-        } catch {
-          // Path doesn't exist or isn't executable, continue searching
-        }
-      }
-
-      if (!found) {
-        // Try to find it with a more comprehensive search
-        try {
-          const { stdout: findResult } = await executeCommand(
-            `find /usr/local/bin /opt/homebrew/bin $HOME/.npm/bin $HOME/.yarn/bin /usr/bin -name "${command}" -type f -executable 2>/dev/null | head -1`,
-          );
-          if (findResult.trim()) {
-            commandPath = findResult.trim();
-            found = true;
-          }
-        } catch {
-          // Comprehensive search failed
-        }
-      }
-
-      if (!found) {
-        throw new Error(
-          `Command not found: ${command}. You may need to use npm instead of pnpm, or specify the full path in preferences.`,
-        );
-      }
     }
   }
 
@@ -346,12 +211,35 @@ export async function startProcess(
   const nodePath = process.execPath;
   const nodeDir = nodePath.substring(0, nodePath.lastIndexOf("/"));
 
+  // Common paths where package managers might be installed
+  const homeDir = process.env.HOME || "";
+  const additionalPaths = [
+    `${homeDir}/.local/share/pnpm`,
+    `${homeDir}/.pnpm`,
+    `${homeDir}/Library/pnpm`,
+    `${homeDir}/.npm-global/bin`,
+    `${homeDir}/.yarn/bin`,
+    `${homeDir}/.config/yarn/global/node_modules/.bin`,
+    `${homeDir}/.bun/bin`,
+    `${homeDir}/.deno/bin`,
+    `${homeDir}/.cargo/bin`,
+    `${homeDir}/.volta/bin`,
+    `${homeDir}/.fnm`,
+    "/opt/homebrew/bin",
+    "/opt/homebrew/opt/node/bin",
+    "/usr/local/bin",
+    nodeDir,
+  ]
+    .filter(Boolean)
+    .join(":");
+
   const processEnv = {
     ...process.env,
     FORCE_COLOR: "1",
     // Add common paths to PATH to ensure child processes can find commands
-    // Include the directory containing the current Node.js binary
-    PATH: `${nodeDir}:/usr/local/bin:/opt/homebrew/bin:${process.env.HOME}/.npm/bin:${process.env.HOME}/.yarn/bin:${process.env.HOME}/.nvm/versions/node/*/bin:${process.env.HOME}/.fnm/node-versions/*/installation/bin:${process.env.HOME}/.volta/bin:${process.env.PATH || "/usr/bin:/bin"}`,
+    PATH: `${additionalPaths}:${process.env.PATH || "/usr/bin:/bin"}`,
+    // Set HOST for dev server if provided
+    ...(host ? { HOST: host } : {}),
   };
 
   // Create output log files
@@ -363,12 +251,21 @@ export async function startProcess(
   const out = openSync(outputFile, "a");
   const err = openSync(errorFile, "a");
 
-  // Spawn the process as completely detached
-  const childProcess = spawn(commandPath, args, {
+  // Combine command and args into a single command string for shell execution
+  const fullCommand = args.length > 0 ? `${command} ${args.join(" ")}` : command;
+
+  // Get the user's default shell and build command with profile
+  const userShell = getUserShell();
+  const commandWithProfile = buildCommandWithProfile(fullCommand);
+
+  // Spawn the process through a shell for better compatibility
+  // Using -c to execute the command (not -l which might be slower)
+  const childProcess = spawn(userShell, ["-c", commandWithProfile], {
     cwd: worktreePath,
     env: processEnv,
     detached: true,
     stdio: ["ignore", out, err], // Ignore stdin, redirect stdout/stderr to files
+    shell: false, // We're already using shell with -c
   });
 
   // Close the file descriptors in the parent
@@ -393,6 +290,24 @@ export async function startProcess(
     stdio: ["ignore", "pipe", "pipe"],
   });
 
+  // Check if the process actually started
+  if (!pid) {
+    throw new Error("Failed to spawn process - no PID returned");
+  }
+
+  const info: ProcessInfo = {
+    pid: pid,
+    command: args.length > 0 ? `${command} ${args.join(" ")}` : command,
+    args: [],
+    cwd: worktreePath,
+    startTime: new Date(),
+    outputBuffer: [],
+    errorBuffer: [],
+    status: "running",
+    outputFile,
+    errorFile,
+  };
+
   // Clean up tail processes and files when main process exits
   const cleanup = async () => {
     tailStdout.kill();
@@ -409,31 +324,18 @@ export async function startProcess(
     if (!isRunning) {
       clearInterval(monitorProcess);
       cleanup();
+      // Update status
+      info.status = "stopped";
       // Emit exit event
       runningProcesses.delete(worktreePath);
       const stored = await getStoredProcesses();
-      delete stored[worktreePath];
-      await storeProcesses(stored);
+      if (stored[worktreePath]) {
+        await deallocateHost(worktreePath);
+        delete stored[worktreePath];
+        await storeProcesses(stored);
+      }
     }
   }, 1000);
-
-  // Check if the process actually started
-  if (!pid) {
-    throw new Error("Failed to spawn process");
-  }
-
-  const info: ProcessInfo = {
-    pid: pid,
-    command,
-    args,
-    cwd: worktreePath,
-    startTime: new Date(),
-    outputBuffer: [],
-    errorBuffer: [],
-    status: "running",
-    outputFile,
-    errorFile,
-  };
 
   // Handle stdout from tail process
   tailStdout.stdout?.on("data", (data: Buffer) => {
@@ -480,6 +382,7 @@ export async function startProcess(
     outputFile,
     errorFile,
     startTime: info.startTime.toISOString(),
+    host,
   };
   await storeProcesses(stored);
 
@@ -517,13 +420,14 @@ export async function stopProcess(worktreePath: string): Promise<void> {
     runningProcesses.delete(worktreePath);
   }
 
-  // Also kill any processes we might have missed
-  await killProcessesInDirectory(worktreePath);
-
-  // Update stored processes
+  // Update stored processes and deallocate host
   const stored = await getStoredProcesses();
-  delete stored[worktreePath];
-  await storeProcesses(stored);
+  if (stored[worktreePath]) {
+    // Deallocate the host if one was allocated
+    await deallocateHost(worktreePath);
+    delete stored[worktreePath];
+    await storeProcesses(stored);
+  }
 }
 
 // Get process info for a worktree
@@ -655,8 +559,11 @@ async function restoreProcessFromStorage(worktreePath: string, data: StoredProce
         clearInterval(monitorProcess);
         runningProcesses.delete(worktreePath);
         const stored = await getStoredProcesses();
-        delete stored[worktreePath];
-        await storeProcesses(stored);
+        if (stored[worktreePath]) {
+          await deallocateHost(worktreePath);
+          delete stored[worktreePath];
+          await storeProcesses(stored);
+        }
       }
     }, 5000); // Check every 5 seconds
   }
@@ -689,27 +596,14 @@ export async function getProcessDetails(worktreePath: string, pid?: number): Pro
     if (pid) {
       details.push("## Process Information\n");
 
-      // Get process details using find-process
-      try {
-        const processes = await find("pid", pid);
-        if (processes.length > 0) {
-          const proc = processes[0];
-          details.push(`**Command:** \`${proc.cmd || "N/A"}\``);
-          details.push(`**Name:** ${proc.name}`);
-          if (proc.ppid !== undefined) {
-            details.push(`**Parent PID:** ${proc.ppid}`);
-          }
-          details.push("");
-        }
-      } catch {
-        // Failed to get process info
-      }
-
       // Get CPU and memory usage
       try {
-        const { stdout: topOutput } = await executeCommand(`ps -p ${pid} -o %cpu,%mem,rss,vsz | tail -n +2`);
+        const { stdout: topOutput } = await executeCommand(`ps -p ${pid} -o %cpu,%mem,rss,vsz,command | tail -n +2`);
         if (topOutput.trim()) {
-          const [cpu, mem, rss, vsz] = topOutput.trim().split(/\s+/);
+          const parts = topOutput.trim().split(/\s+/);
+          const [cpu, mem, rss, vsz] = parts;
+          const command = parts.slice(4).join(" ");
+          details.push(`**Command:** \`${command}\``);
           details.push("## Resource Usage\n");
           details.push(`**CPU:** ${cpu}%`);
           details.push(`**Memory:** ${mem}%`);
@@ -754,29 +648,17 @@ export async function getProcessDetails(worktreePath: string, pid?: number): Pro
       } catch {
         // Failed to get environment variables
       }
-    } else {
-      // Find all processes in the directory
-      const pids = await findProcessesInDirectory(worktreePath);
 
-      if (pids.length > 0) {
-        details.push(`## Found ${pids.length} Process${pids.length > 1 ? "es" : ""}\n`);
-
-        for (const processPid of pids) {
-          try {
-            const { stdout: psOutput } = await executeCommand(`ps -p ${processPid} -o pid,command | tail -n +2`);
-            if (psOutput.trim()) {
-              const [pidStr, ...commandParts] = psOutput.trim().split(/\s+/);
-              details.push(`### PID ${pidStr}`);
-              details.push(`\`${commandParts.join(" ")}\``);
-              details.push("");
-            }
-          } catch {
-            // Process might have ended
-          }
-        }
-      } else {
-        details.push("No processes found running in this worktree directory.");
+      // Get host information from stored process data
+      const stored = await getStoredProcesses();
+      const processData = Object.values(stored).find((data) => data.pid === pid);
+      if (processData?.host) {
+        details.push("## Host Information\n");
+        details.push(`**Allocated Host:** ${processData.host}`);
+        details.push("");
       }
+    } else {
+      details.push("No process information available.");
     }
 
     // Add timestamp
@@ -789,17 +671,9 @@ export async function getProcessDetails(worktreePath: string, pid?: number): Pro
   return details.join("\n");
 }
 
-// Cache for process detection to avoid repeated lookups
-let processCache: {
-  timestamp: number;
-  processes: Map<string, number[]>;
-} | null = null;
-
-const CACHE_TTL = 2000; // 2 seconds cache
-
-// Invalidate the process cache
+// Invalidate the process cache (kept for compatibility)
 export function invalidateProcessCache() {
-  processCache = null;
+  // No longer using cache
 }
 
 // Get all worktree paths from projects
@@ -813,163 +687,36 @@ export async function getAllWorktreePaths(): Promise<string[]> {
     const worktreePaths = projects.flatMap((project) => project.worktrees.map((w) => w.path));
 
     return worktreePaths;
-  } catch (error) {
-    console.error("[Process] Error getting worktree paths:", error);
+  } catch {
     return [];
   }
 }
 
-// Kill all dev servers in worktree directories
-export async function killAllWorktreeDevServers(worktreePaths: string[], excludePath?: string): Promise<number> {
-  let killedCount = 0;
-
-  try {
-    // Find all Node.js processes
-    const allNodeProcesses = await find("name", "node");
-
-    for (const proc of allNodeProcesses) {
-      if (!proc.cmd) continue;
-
-      // Skip if it's the process we want to keep running (case-insensitive on macOS)
-      if (excludePath && proc.cmd.toLowerCase().includes(excludePath.toLowerCase())) continue;
-
-      // Check if this process belongs to any worktree (case-insensitive on macOS)
-      let belongsToWorktree = false;
-      for (const worktreePath of worktreePaths) {
-        if (proc.cmd.toLowerCase().includes(worktreePath.toLowerCase())) {
-          belongsToWorktree = true;
-          break;
-        }
-      }
-
-      // Skip if not in a worktree
-      if (!belongsToWorktree) continue;
-
-      const cmdLower = proc.cmd.toLowerCase();
-
-      // Skip non-dev server processes
-      const isExcluded =
-        cmdLower.includes("biome") ||
-        cmdLower.includes("eslint") ||
-        cmdLower.includes("prettier") ||
-        cmdLower.includes("typescript-language-server") ||
-        cmdLower.includes("tsserver") ||
-        cmdLower.includes("copilot") ||
-        cmdLower.includes("visual studio code") ||
-        cmdLower.includes("code helper") ||
-        cmdLower.includes("lsp") ||
-        cmdLower.includes("language-server") ||
-        cmdLower.includes("/typescript/lib/") ||
-        cmdLower.includes("typingsinstaller");
-
-      if (isExcluded) continue;
-
-      // Check if it's a dev server
-      const isDevServer =
-        cmdLower.includes("dev") ||
-        cmdLower.includes("start") ||
-        cmdLower.includes("serve") ||
-        cmdLower.includes("watch") ||
-        cmdLower.includes("webpack") ||
-        cmdLower.includes("vite") ||
-        cmdLower.includes("next") ||
-        cmdLower.includes("localhost") ||
-        cmdLower.includes(":3000") ||
-        cmdLower.includes(":4000") ||
-        cmdLower.includes(":5000") ||
-        cmdLower.includes(":8000") ||
-        cmdLower.includes(":8080");
-
-      if (isDevServer) {
-        try {
-          await killProcess(proc.pid);
-          killedCount++;
-        } catch (error) {
-          console.error(`Failed to kill process ${proc.pid}:`, error);
-        }
-      }
-    }
-  } catch (error) {
-    console.error("[Process] Error killing worktree dev servers:", error);
-  }
-
-  return killedCount;
-}
-
-// Monitor external processes - ultra-fast version
+// Detect running processes based on LocalStorage
 export async function detectExternalProcesses(worktreePaths: string[]): Promise<Map<string, number[]>> {
-  const now = Date.now();
-
-  // Return cached result if still fresh
-  if (processCache && now - processCache.timestamp < CACHE_TTL) {
-    // Filter cached results to only requested worktrees
-    const result = new Map<string, number[]>();
-    for (const path of worktreePaths) {
-      const pids = processCache.processes.get(path);
-      if (pids) {
-        result.set(path, pids);
-      }
-    }
-    return result;
-  }
   const result = new Map<string, number[]>();
 
   try {
-    // Find all Node.js processes once
-    const allNodeProcesses = await find("name", "node");
+    // Get stored processes
+    const stored = await getStoredProcesses();
 
-    // Build a map in a single pass
-    for (const proc of allNodeProcesses) {
-      if (!proc.cmd) continue;
-
-      const cmdLower = proc.cmd.toLowerCase();
-
-      // Quick exclusion check first
-      if (
-        cmdLower.includes("biome") ||
-        cmdLower.includes("eslint") ||
-        cmdLower.includes("prettier") ||
-        cmdLower.includes("lsp") ||
-        cmdLower.includes("tsserver") ||
-        cmdLower.includes("/typescript/lib/") ||
-        cmdLower.includes("code helper") ||
-        cmdLower.includes("visual studio code")
-      ) {
-        continue;
-      }
-
-      // Check if it's likely a dev server
-      if (
-        !(
-          cmdLower.includes("dev") ||
-          cmdLower.includes("start") ||
-          cmdLower.includes("serve") ||
-          cmdLower.includes("webpack") ||
-          cmdLower.includes("vite")
-        )
-      ) {
-        continue;
-      }
-
-      // Find which worktree this process belongs to (case-insensitive on macOS)
-      for (const worktreePath of worktreePaths) {
-        if (cmdLower.includes(worktreePath.toLowerCase())) {
-          if (!result.has(worktreePath)) {
-            result.set(worktreePath, []);
-          }
-          result.get(worktreePath)!.push(proc.pid);
-          break; // A process can only belong to one worktree
+    // Check which stored processes are still running
+    for (const [path, data] of Object.entries(stored)) {
+      if (worktreePaths.includes(path)) {
+        const isRunning = await isProcessRunning(data.pid);
+        if (isRunning) {
+          result.set(path, [data.pid]);
+        } else {
+          // Clean up dead process from storage
+          delete stored[path];
         }
       }
     }
 
-    // Update cache
-    processCache = {
-      timestamp: now,
-      processes: result,
-    };
-  } catch (error) {
-    console.error("[Process] Error in fast detection:", error);
+    // Update storage if we cleaned up any dead processes
+    await storeProcesses(stored);
+  } catch {
+    // Silent error - process detection failed
   }
 
   return result;
@@ -977,7 +724,33 @@ export async function detectExternalProcesses(worktreePaths: string[]): Promise<
 
 // Helper function to check if output contains the success message
 function isSuccessMessage(output: string): boolean {
-  return output.includes(DEV_SERVER_SUCCESS_MESSAGE);
+  const lowerOutput = output.toLowerCase();
+  // Check for various common success indicators
+  return (
+    output.includes(DEV_SERVER_SUCCESS_MESSAGE) ||
+    lowerOutput.includes("ready") ||
+    lowerOutput.includes("compiled successfully") ||
+    lowerOutput.includes("started on") ||
+    lowerOutput.includes("listening on") ||
+    lowerOutput.includes("server running") ||
+    lowerOutput.includes("dev server running") ||
+    (lowerOutput.includes("local") && lowerOutput.includes("http")) ||
+    lowerOutput.includes("webpack compiled")
+  );
+}
+
+// Helper function to check if output indicates a failure
+function isFailureMessage(output: string): boolean {
+  const lowerOutput = output.toLowerCase();
+  return (
+    lowerOutput.includes("exited with code") ||
+    lowerOutput.includes("command failed") ||
+    lowerOutput.includes("elifecycle") ||
+    lowerOutput.includes("failed to connect") ||
+    lowerOutput.includes("error:") ||
+    lowerOutput.includes("cannot find module") ||
+    lowerOutput.includes("module not found")
+  );
 }
 
 // Start a process and wait for it to be ready
@@ -985,38 +758,114 @@ export async function startProcessAndWaitForReady(
   worktreePath: string,
   command: string,
   args: string[] = [],
+  host?: string,
+  timeoutMs?: number,
 ): Promise<{ success: boolean; processInfo?: ProcessInfo; error?: string }> {
   let processInfo: ProcessInfo | undefined;
   let resolved = false;
 
   return new Promise((resolve) => {
-    // Set up timeout
-    const timeout = setTimeout(() => {
-      if (!resolved) {
-        resolved = true;
-        resolve({
-          success: false,
-          processInfo,
-          error: `Process did not start successfully within ${DEV_SERVER_TIMEOUT_MS / 1000} seconds`,
-        });
+    // Use provided timeout or default to 60 seconds (good for monorepos)
+    const TOTAL_TIMEOUT_MS = timeoutMs || 60000; // Total timeout
+    const IDLE_TIMEOUT_MS = 20000; // 20 seconds without output
+    let hasReceivedOutput = false;
+    let lastOutputTime = Date.now();
+    const startTime = Date.now();
+
+    // Check periodically if we should timeout
+    const timeoutCheck = setInterval(() => {
+      if (resolved) {
+        clearInterval(timeoutCheck);
+        return;
       }
-    }, DEV_SERVER_TIMEOUT_MS);
+
+      const now = Date.now();
+      const totalElapsed = now - startTime;
+      const idleTime = now - lastOutputTime;
+
+      // Timeout if total time exceeded
+      if (totalElapsed > TOTAL_TIMEOUT_MS) {
+        resolved = true;
+        clearInterval(timeoutCheck);
+
+        if (processInfo && processInfo.status === "running" && hasReceivedOutput) {
+          resolve({ success: true, processInfo });
+        } else {
+          resolve({
+            success: false,
+            processInfo,
+            error: `Process did not start successfully within ${TOTAL_TIMEOUT_MS / 1000} seconds`,
+          });
+        }
+      }
+      // Timeout if no output for too long (but only after we've received some output)
+      else if (hasReceivedOutput && idleTime > IDLE_TIMEOUT_MS) {
+        resolved = true;
+        clearInterval(timeoutCheck);
+
+        if (processInfo && processInfo.status === "running") {
+          resolve({ success: true, processInfo });
+        } else {
+          resolve({
+            success: false,
+            processInfo,
+            error: `Process stopped producing output for ${IDLE_TIMEOUT_MS / 1000} seconds`,
+          });
+        }
+      }
+    }, 1000); // Check every second
 
     // Start the process
-    startProcess(worktreePath, command, args, (output) => {
-      // Check if success message appears
-      if (!resolved && processInfo && isSuccessMessage(output.data)) {
-        resolved = true;
-        clearTimeout(timeout);
-        resolve({ success: true, processInfo });
-      }
-    })
+    startProcess(
+      worktreePath,
+      command,
+      args,
+      (output) => {
+        hasReceivedOutput = true;
+        lastOutputTime = Date.now();
+
+        // Check for failure first
+        if (!resolved && isFailureMessage(output.data)) {
+          resolved = true;
+          clearInterval(timeoutCheck);
+
+          // Extract error message if possible
+          let errorMessage = "Process failed to start";
+          if (output.data.toLowerCase().includes("exited with code")) {
+            errorMessage = output.data;
+          } else if (output.data.toLowerCase().includes("failed to connect")) {
+            errorMessage = "Failed to connect to daemon";
+          } else if (output.data.toLowerCase().includes("command failed")) {
+            errorMessage = "Command failed";
+          }
+
+          resolve({
+            success: false,
+            processInfo,
+            error: errorMessage,
+          });
+
+          // Stop the process if it's still marked as running
+          if (processInfo) {
+            stopProcess(worktreePath).catch(() => {
+              // Ignore errors when stopping failed process
+            });
+          }
+        } else if (!resolved && processInfo && isSuccessMessage(output.data)) {
+          // Check if success message appears
+          resolved = true;
+          clearInterval(timeoutCheck);
+          resolve({ success: true, processInfo });
+        }
+      },
+      host,
+    )
       .then((info) => {
         processInfo = info;
         // Process started successfully, now we wait for success message or timeout
       })
       .catch((error) => {
-        clearTimeout(timeout);
+        clearInterval(timeoutCheck);
         if (!resolved) {
           resolved = true;
           resolve({

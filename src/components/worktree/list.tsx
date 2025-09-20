@@ -1,6 +1,6 @@
 import type { BareRepository, Worktree } from "#/config/types";
 import { getPreferences } from "#/helpers/raycast";
-import { useViewingWorktreesStore } from "#/stores/viewing-worktrees";
+import { getProcessInfo } from "#/helpers/process";
 import { useFrecencySorting } from "@raycast/utils";
 import { memo, useState } from "react";
 import { Item } from "./item";
@@ -20,7 +20,6 @@ export const List = memo(
     revalidateProjects: () => void;
   }) => {
     const { enableWorktreesFrequencySorting } = getPreferences();
-    const { isWorktreeRunning } = useViewingWorktreesStore();
     const [sortOrder, setSortOrder] = useState<WorktreeSortOrder>("creation_desc");
 
     let worktrees = incomingWorktrees;
@@ -62,8 +61,8 @@ export const List = memo(
 
     // Sort worktrees to put running processes at the top
     worktrees = [...worktrees].sort((a, b) => {
-      const aIsRunning = isWorktreeRunning(a.path);
-      const bIsRunning = isWorktreeRunning(b.path);
+      const aIsRunning = !!getProcessInfo(a.path);
+      const bIsRunning = !!getProcessInfo(b.path);
 
       // If both are running or both are not running, maintain existing order
       if (aIsRunning === bIsRunning) return 0;

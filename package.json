@@ -268,6 +268,15 @@
       "required": false,
       "default": "pnpm run dev",
       "placeholder": "pnpm run dev"
+    },
+    {
+      "type": "textfield",
+      "name": "proxyPorts",
+      "title": "Proxy Ports",
+      "description": "Comma-separated list of ports to proxy from localhost to dev server host (e.g., '3000,5173,8080')",
+      "required": false,
+      "default": "",
+      "placeholder": "3000,5173,8080"
     }
   ],
   "dependencies": {
@@ -276,7 +285,7 @@
     "fast-glob": "^3.3.3",
     "find-process": "^2.0.0",
     "parse-url": "^9.2.0",
-    "zustand": "^5.0.3"
+    "zustand": "^5.0.8"
   },
   "devDependencies": {
     "@raycast/eslint-config": "^2.0.4",

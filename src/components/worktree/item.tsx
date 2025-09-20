@@ -7,16 +7,17 @@ import { RemoveProject } from "#/components/actions/remove-project";
 import { RemoveWorktree } from "#/components/actions/remove-worktree";
 import { RenameWorktree } from "#/components/actions/rename-worktree";
 import { ResetRanking } from "#/components/actions/reset-ranking";
-import { RunWorktree } from "#/components/actions/run-worktree";
+import { RunDevServer } from "#/components/actions/run-dev-server";
+import { BindToLocalhost } from "#/components/actions/bind-to-localhost";
 import type { BareRepository, Worktree } from "#/config/types";
 import type { WorktreeSortOrder } from "./list";
 import { getPreferences } from "#/helpers/raycast";
 import { useBranchInformation } from "#/hooks/use-branch-information";
-import { useWorktreeProcessStatus } from "#/hooks/use-process-monitor";
-import { useViewingWorktreesStore } from "#/stores/viewing-worktrees";
+import { useDevServer } from "#/hooks/use-dev-server";
+import { useProxy } from "#/hooks/use-proxy";
 import { Action, ActionPanel, Color, Icon, List } from "@raycast/api";
 import { relative } from "node:path";
-import { memo, useEffect } from "react";
+import { memo } from "react";
 import AddWorktree from "../../add-worktree";
 import ViewProcessOutput from "../../view-process-output";
 import { ProcessDetails } from "../process-details";
@@ -39,20 +40,12 @@ export const Item = memo(
     sortOrder?: WorktreeSortOrder;
     setSortOrder?: (order: WorktreeSortOrder) => void;
   }) => {
-    const selectedWorktree = useViewingWorktreesStore((state) => state.selectedWorktree);
-
     const { projectsPath } = getPreferences();
     const gitRemote = project?.gitRemotes?.[0];
 
     const branchInformation = useBranchInformation({ path: worktree.path });
-    const { isRunning, processInfo, hasExternalProcess } = useWorktreeProcessStatus(worktree.path);
-
-    useEffect(() => {
-      if (!selectedWorktree) return;
-      if (worktree.id !== selectedWorktree) return;
-
-      branchInformation.revalidateBranchInformation();
-    }, [selectedWorktree]);
+    const { isRunning, processInfo, host } = useDevServer(worktree.path);
+    const { isProxying } = useProxy(worktree.path);
 
     const isDirty = branchInformation.isDirty === undefined ? worktree.dirty : branchInformation.isDirty;
     const currentCommit = branchInformation.commit === undefined ? worktree.commit : branchInformation.commit;
@@ -72,23 +65,23 @@ export const Item = memo(
         subtitle={`${worktree.branch ?? "detached"} @ ${currentCommit?.slice(0, 7) ?? "none"}`}
         keywords={worktree.branch ? worktree.branch.split("-") : []}
         accessories={[
-          ...(isRunning
+          ...(isProxying
             ? [
                 {
-                  icon: { source: Icon.CircleFilled, tintColor: Color.Green },
-                  tooltip: hasExternalProcess ? "Running (external)" : "Running",
+                  text: { value: "localhost", color: Color.Green },
+                  tooltip: "Proxied to localhost",
+                },
+              ]
+            : []),
+          ...(host
+            ? [
+                {
+                  text: { value: host, color: Color.Green },
+                  tooltip: `Dev server running on ${host}`,
                 },
               ]
             : []),
           ...(isDirty ? [{ text: { value: "U", color: Color.Yellow }, tooltip: "Unsaved Changes" }] : []),
-          ...(sortOrder && sortOrder.startsWith("creation_") && worktree.createdAt
-            ? [
-                {
-                  text: new Date(worktree.createdAt).toLocaleDateString(),
-                  tooltip: `Created: ${new Date(worktree.createdAt).toLocaleString()}`,
-                },
-              ]
-            : []),
           ...(gitRemote?.icon ? [{ icon: gitRemote.icon, tooltip: gitRemote.host }] : []),
         ]}
         actions={
@@ -103,7 +96,19 @@ export const Item = memo(
               <OpenTerminal path={worktree.path} />
               <CopyPath path={worktree.path} />
 
-              <RunWorktree worktree={worktree} onProcessStart={revalidateProjects} onProcessStop={revalidateProjects} />
+              <RunDevServer
+                worktree={worktree}
+                onProcessStart={revalidateProjects}
+                onProcessStop={revalidateProjects}
+              />
+
+              {isRunning && (
+                <BindToLocalhost
+                  worktree={worktree}
+                  onProxyStart={revalidateProjects}
+                  onProxyStop={revalidateProjects}
+                />
+              )}
 
               {processInfo && (
                 <Action.Push
@@ -118,13 +123,7 @@ export const Item = memo(
                 <Action.Push
                   title="View Process Details"
                   icon={Icon.Info}
-                  target={
-                    <ProcessDetails
-                      worktreePath={worktree.path}
-                      processInfo={processInfo}
-                      isExternal={hasExternalProcess}
-                    />
-                  }
+                  target={<ProcessDetails worktreePath={worktree.path} processInfo={processInfo} />}
                   shortcut={{ modifiers: ["cmd", "shift"], key: "i" }}
                 />
               )}
