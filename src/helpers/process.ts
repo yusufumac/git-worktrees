@@ -128,7 +128,41 @@ async function getAllDescendantPids(pid: number): Promise<number[]> {
 // Kill a process by PID (and all its children)
 export async function killProcess(pid: number, force = false): Promise<void> {
   try {
-    // First, get all child processes
+    // First try to kill the entire process group (negative PID)
+    // This is the most effective way for detached processes started with shells
+    try {
+      await executeCommand(`kill ${force ? "-9" : "-TERM"} -- -${pid}`);
+      // Give it a moment to clean up
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    } catch {
+      // Process group kill might fail if process is not a group leader
+    }
+
+    // Get all processes in the session (including subprocesses)
+    try {
+      // Use ps to find all processes with the same session ID (SID)
+      const { stdout: sessionProcs } = await executeCommand(
+        `ps -eo pid,sid,ppid,command | awk '$2 == ${pid} {print $1}' | grep -v "^${pid}$"`,
+      );
+      const sessionPids = sessionProcs
+        .split("\n")
+        .filter(Boolean)
+        .map((p) => parseInt(p, 10))
+        .filter((p) => !isNaN(p));
+
+      // Kill all session processes
+      for (const spid of sessionPids) {
+        try {
+          await executeCommand(`kill ${force ? "-9" : "-15"} ${spid}`);
+        } catch {
+          // Process might already be dead
+        }
+      }
+    } catch {
+      // Session-based kill might not work on all systems
+    }
+
+    // Get all child processes recursively
     const childPids = await getAllDescendantPids(pid);
 
     // Kill children first (bottom-up to avoid orphans)
@@ -140,26 +174,26 @@ export async function killProcess(pid: number, force = false): Promise<void> {
       }
     }
 
-    // Then kill the parent
-    await executeCommand(`kill ${force ? "-9" : "-15"} ${pid}`);
-  } catch {
-    // If the structured approach fails, try alternative methods
+    // Finally kill the parent process itself
     try {
-      // Try killing the process group
-      await executeCommand(`kill ${force ? "-9" : "-15"} -- -${pid}`);
+      await executeCommand(`kill ${force ? "-9" : "-15"} ${pid}`);
     } catch {
-      // If that fails too, try pkill
-      try {
-        await executeCommand(`pkill -P ${pid}`); // Kill children
-        await executeCommand(`kill ${force ? "-9" : "-15"} ${pid}`); // Kill parent
-      } catch {
-        if (!force) {
-          // If gentle kill fails, try force kill
-          await killProcess(pid, true);
-        }
-        // Process might already be gone
-      }
+      // Parent might already be dead from group kill
     }
+
+    // Double-check with pkill as a fallback
+    try {
+      // Use pkill to find any remaining processes started by this PID
+      await executeCommand(`pkill -P ${pid}`);
+    } catch {
+      // pkill might not find anything, that's ok
+    }
+  } catch {
+    // If all gentle methods fail and we haven't tried force yet
+    if (!force) {
+      await killProcess(pid, true);
+    }
+    // If force kill also fails, the process is likely already gone
   }
 }
 
@@ -407,6 +441,16 @@ export async function stopProcess(worktreePath: string): Promise<void> {
     // Kill the process by PID (since it's detached)
     try {
       await killProcess(info.pid);
+
+      // Wait a bit to ensure processes are terminated
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      // Double-check if any processes are still running
+      const isStillRunning = await isProcessRunning(info.pid);
+      if (isStillRunning) {
+        // Force kill if still running
+        await killProcess(info.pid, true);
+      }
     } catch {
       // Try force kill
       try {
@@ -414,6 +458,29 @@ export async function stopProcess(worktreePath: string): Promise<void> {
       } catch {
         // Process might have already exited
       }
+    }
+
+    // Additional cleanup: Try to kill any orphaned node processes in the worktree directory
+    try {
+      // Find any node/npm/yarn/pnpm processes still running in this directory
+      const { stdout: orphans } = await executeCommand(
+        `ps aux | grep -E "(node|npm|yarn|pnpm|bun|deno|tsx|ts-node)" | grep "${worktreePath}" | grep -v grep | awk '{print $2}'`,
+      );
+      const orphanPids = orphans
+        .split("\n")
+        .filter(Boolean)
+        .map((p) => parseInt(p, 10))
+        .filter((p) => !isNaN(p));
+
+      for (const orphanPid of orphanPids) {
+        try {
+          await executeCommand(`kill -9 ${orphanPid}`);
+        } catch {
+          // Orphan might already be dead
+        }
+      }
+    } catch {
+      // No orphans found or command failed
     }
 
     info.status = "stopped";

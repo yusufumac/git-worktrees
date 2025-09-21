@@ -39,7 +39,7 @@ export async function setupProxyRoutes(worktreePath: string, targetHost: string,
   const allStates = await getAllProxyStates();
   for (const [otherWorktreePath, state] of Object.entries(allStates)) {
     if (otherWorktreePath !== worktreePath && state.status === "active") {
-      const conflictingPorts = state.ports.filter(p => ports.includes(p));
+      const conflictingPorts = state.ports.filter((p) => ports.includes(p));
       if (conflictingPorts.length > 0) {
         // Remove the proxy for the other worktree
         await removeProxyRoutes(otherWorktreePath);
