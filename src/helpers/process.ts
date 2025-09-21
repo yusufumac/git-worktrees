@@ -28,7 +28,10 @@ export interface ProcessOutput {
 const MAX_OUTPUT_LINES = 50000; // Increased buffer size for more output
 
 // Map to store running processes in memory
-const runningProcesses = new Map<string, { process: ChildProcess; info: ProcessInfo }>();
+const runningProcesses = new Map<
+  string,
+  { process: ChildProcess; info: ProcessInfo; tailProcesses?: ChildProcess[] }
+>();
 
 // Circular buffer implementation for output storage
 class CircularBuffer<T> {
@@ -404,8 +407,8 @@ export async function startProcess(
   // Handle process error (detached processes don't emit error events to parent)
   // Errors will be captured in the stderr file instead
 
-  // Store process info
-  runningProcesses.set(worktreePath, { process: childProcess, info });
+  // Store process info with tail processes for cleanup
+  runningProcesses.set(worktreePath, { process: childProcess, info, tailProcesses: [tailStdout, tailStderr] });
 
   // Update LocalStorage with full process data
   const stored = await getStoredProcesses();
@@ -436,7 +439,18 @@ export async function stopProcess(worktreePath: string): Promise<void> {
   const running = runningProcesses.get(worktreePath);
 
   if (running) {
-    const { info } = running;
+    const { info, tailProcesses } = running;
+
+    // Kill tail processes first
+    if (tailProcesses) {
+      tailProcesses.forEach((tail) => {
+        try {
+          tail.kill();
+        } catch {
+          // Tail process might already be dead
+        }
+      });
+    }
 
     // Kill the process by PID (since it's detached)
     try {
@@ -579,11 +593,15 @@ async function restoreProcessFromStorage(worktreePath: string, data: StoredProce
       errorFile: data.errorFile,
     };
 
+    // Array to store tail processes for cleanup
+    const tailProcesses: ChildProcess[] = [];
+
     // Set up tail processes to continue reading output
     if (hasOutputFile && data.outputFile) {
       const tailStdout = spawn("tail", ["-f", data.outputFile], {
         stdio: ["ignore", "pipe", "pipe"],
       });
+      tailProcesses.push(tailStdout);
 
       tailStdout.stdout?.on("data", (data: Buffer) => {
         const text = data.toString();
@@ -602,6 +620,7 @@ async function restoreProcessFromStorage(worktreePath: string, data: StoredProce
       const tailStderr = spawn("tail", ["-f", data.errorFile], {
         stdio: ["ignore", "pipe", "pipe"],
       });
+      tailProcesses.push(tailStderr);
 
       tailStderr.stdout?.on("data", (data: Buffer) => {
         const text = data.toString();
@@ -617,13 +636,21 @@ async function restoreProcessFromStorage(worktreePath: string, data: StoredProce
     }
 
     // Store in running processes map (without ChildProcess since it's detached)
-    runningProcesses.set(worktreePath, { process: {} as ChildProcess, info });
+    runningProcesses.set(worktreePath, { process: {} as ChildProcess, info, tailProcesses });
 
     // Monitor the process
     const monitorProcess = setInterval(async () => {
       const isRunning = await isProcessRunning(data.pid);
       if (!isRunning) {
         clearInterval(monitorProcess);
+        // Clean up tail processes
+        tailProcesses.forEach((tail) => {
+          try {
+            tail.kill();
+          } catch {
+            // Tail process might already be dead
+          }
+        });
         runningProcesses.delete(worktreePath);
         const stored = await getStoredProcesses();
         if (stored[worktreePath]) {
@@ -638,6 +665,30 @@ async function restoreProcessFromStorage(worktreePath: string, data: StoredProce
 
 // Clean up orphaned processes and restore running ones
 export async function cleanupOrphanedProcesses(): Promise<void> {
+  // First, kill any orphaned tail processes
+  try {
+    // Find all tail processes that might be orphaned
+    const { stdout: tailPids } = await executeCommand(
+      `ps aux | grep 'tail -f /tmp/raycast-worktree' | grep -v grep | awk '{print $2}'`,
+    );
+    const pids = tailPids
+      .split("\n")
+      .filter(Boolean)
+      .map((p) => parseInt(p, 10))
+      .filter((p) => !isNaN(p));
+
+    // Kill all orphaned tail processes
+    for (const pid of pids) {
+      try {
+        await executeCommand(`kill -9 ${pid}`);
+      } catch {
+        // Process might already be dead
+      }
+    }
+  } catch {
+    // No tail processes found or command failed
+  }
+
   const stored = await getStoredProcesses();
 
   for (const [path, data] of Object.entries(stored)) {
