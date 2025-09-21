@@ -56,7 +56,7 @@ export async function setupProxyRoutes(worktreePath: string, targetHost: string,
       serverIds.push(serverId);
 
       const serverConfig = {
-        listen: [`:${port}`],
+        listen: [`localhost:${port}`],
         routes: [
           {
             handle: [
