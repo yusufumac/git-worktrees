@@ -58,7 +58,6 @@ export const List = memo(
       });
     }
 
-
     return worktrees.map((worktree) => {
       return (
         <Item

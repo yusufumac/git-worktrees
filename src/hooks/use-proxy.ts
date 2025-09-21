@@ -1,9 +1,9 @@
-import { useState, useCallback, useMemo, useEffect } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { showToast, Toast } from "@raycast/api";
 import { getPreferences } from "#/helpers/raycast";
-import { getHostForWorktree } from "#/helpers/host-manager";
 import { setupProxyRoutes, removeProxyRoutes, isProxyServerInstalled } from "#/helpers/proxy-manager";
 import useProxyStore from "#/stores/proxy-store";
+import useProcessStore from "#/stores/process-store";
 
 export function useProxy(worktreePath: string) {
   const preferences = getPreferences() as Preferences & { proxyPorts?: string };
@@ -11,7 +11,6 @@ export function useProxy(worktreePath: string) {
 
   // Get proxy state from Zustand store
   const proxyState = useProxyStore((state) => state.getProxyState(worktreePath));
-  const _ensureInitialized = useProxyStore((state) => state._ensureInitialized);
 
   // Parse ports from preferences
   const configuredPorts = useMemo(() => {
@@ -22,11 +21,6 @@ export function useProxy(worktreePath: string) {
       .map((p: string) => parseInt(p.trim()))
       .filter((p: number) => !isNaN(p) && p > 0 && p < 65536);
   }, [preferences.proxyPorts]);
-
-  // Trigger initialization on mount (fire and forget)
-  useEffect(() => {
-    _ensureInitialized();
-  }, [_ensureInitialized]);
 
   // Derive state from store
   const isProxying = proxyState?.status === "active" || false;
@@ -53,8 +47,9 @@ export function useProxy(worktreePath: string) {
       return false;
     }
 
-    const host = await getHostForWorktree(worktreePath);
-    if (!host) {
+    // Check if dev server is running and get its host
+    const currentProcessInfo = useProcessStore.getState().getProcessInfo(worktreePath);
+    if (!currentProcessInfo || currentProcessInfo.status !== "running" || !currentProcessInfo.host) {
       await showToast({
         style: Toast.Style.Failure,
         title: "Dev Server Not Running",
@@ -62,6 +57,8 @@ export function useProxy(worktreePath: string) {
       });
       return false;
     }
+
+    const host = currentProcessInfo.host;
 
     setIsLoading(true);
     try {

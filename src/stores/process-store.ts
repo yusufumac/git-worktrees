@@ -4,6 +4,9 @@ import type { ChildProcess } from "child_process";
 
 const PROCESS_STORAGE_KEY = "worktree-processes";
 
+// Load initial data from LocalStorage
+const initialProcesses: Record<string, StoredProcessData> = {};
+
 export interface StoredProcessData {
   pid: number;
   command: string;
@@ -25,6 +28,7 @@ export interface ProcessInfo {
   status: "running" | "stopped" | "error";
   outputFile?: string;
   errorFile?: string;
+  host?: string;
 }
 
 export interface RunningProcess {
@@ -36,9 +40,6 @@ export interface RunningProcess {
 interface ProcessState {
   processes: Record<string, StoredProcessData>;
   runningProcesses: Map<string, RunningProcess>;
-  isLoading: boolean;
-  isInitialized: boolean;
-  initializeStore: () => Promise<void>;
   getStoredProcesses: () => Record<string, StoredProcessData>;
   storeProcess: (worktreePath: string, processData: StoredProcessData) => Promise<void>;
   removeProcess: (worktreePath: string) => Promise<void>;
@@ -49,67 +50,24 @@ interface ProcessState {
   getRunningProcess: (worktreePath: string) => RunningProcess | undefined;
   getProcessInfo: (worktreePath: string) => ProcessInfo | null;
   getAllRunningProcesses: () => Map<string, ProcessInfo>;
+  // Keep for backward compatibility
+  initializeStore: () => Promise<void>;
 }
 
 const useProcessStore = create<ProcessState>((set, get) => ({
-  processes: {},
+  processes: initialProcesses,
   runningProcesses: new Map(),
-  isLoading: false,
-  isInitialized: false,
 
+  // Keep backward compatibility - no-op since already initialized
   initializeStore: async () => {
-    if (get().isInitialized) return;
-
-    set({ isLoading: true });
-    try {
-      const stored = await LocalStorage.getItem<string>(PROCESS_STORAGE_KEY);
-      if (!stored) {
-        set({ processes: {}, isInitialized: true });
-        return;
-      }
-
-      const data = JSON.parse(stored);
-      // Handle legacy format (just PIDs)
-      if (typeof Object.values(data)[0] === "number") {
-        // Convert legacy format to new format
-        const converted: Record<string, StoredProcessData> = {};
-        for (const [path, pid] of Object.entries(data)) {
-          converted[path] = {
-            pid: pid as number,
-            command: "unknown",
-            args: [],
-            startTime: new Date().toISOString(),
-          };
-        }
-        set({ processes: converted, isInitialized: true });
-      } else {
-        set({ processes: data, isInitialized: true });
-      }
-    } catch {
-      set({ processes: {}, isInitialized: true });
-    } finally {
-      set({ isLoading: false });
-    }
+    // No-op, already initialized on creation
   },
 
   getStoredProcesses: () => {
-    const state = get();
-    if (!state.isInitialized) {
-      // If not initialized, return empty object
-      // The caller should ensure initialization
-      return {};
-    }
-    return state.processes;
+    return get().processes;
   },
 
   storeProcess: async (worktreePath: string, processData: StoredProcessData) => {
-    const state = get();
-
-    // Ensure store is initialized
-    if (!state.isInitialized) {
-      await state.initializeStore();
-    }
-
     const updatedProcesses = {
       ...get().processes,
       [worktreePath]: processData,
@@ -120,13 +78,6 @@ const useProcessStore = create<ProcessState>((set, get) => ({
   },
 
   removeProcess: async (worktreePath: string) => {
-    const state = get();
-
-    // Ensure store is initialized
-    if (!state.isInitialized) {
-      await state.initializeStore();
-    }
-
     const updatedProcesses = { ...get().processes };
     delete updatedProcesses[worktreePath];
 
@@ -135,13 +86,6 @@ const useProcessStore = create<ProcessState>((set, get) => ({
   },
 
   updateProcesses: async (processes: Record<string, StoredProcessData>) => {
-    const state = get();
-
-    // Ensure store is initialized
-    if (!state.isInitialized) {
-      await state.initializeStore();
-    }
-
     set({ processes });
     await LocalStorage.setItem(PROCESS_STORAGE_KEY, JSON.stringify(processes));
   },
@@ -176,5 +120,33 @@ const useProcessStore = create<ProcessState>((set, get) => ({
     return result;
   },
 }));
+
+// Load initial data after store creation
+(async () => {
+  try {
+    const stored = await LocalStorage.getItem<string>(PROCESS_STORAGE_KEY);
+    if (stored) {
+      const data = JSON.parse(stored);
+      // Handle legacy format (just PIDs)
+      if (typeof Object.values(data)[0] === "number") {
+        // Convert legacy format to new format
+        const converted: Record<string, StoredProcessData> = {};
+        for (const [path, pid] of Object.entries(data)) {
+          converted[path] = {
+            pid: pid as number,
+            command: "unknown",
+            args: [],
+            startTime: new Date().toISOString(),
+          };
+        }
+        useProcessStore.setState({ processes: converted });
+      } else {
+        useProcessStore.setState({ processes: data });
+      }
+    }
+  } catch {
+    // Ignore errors
+  }
+})();
 
 export default useProcessStore;

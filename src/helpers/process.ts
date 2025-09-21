@@ -54,20 +54,13 @@ class CircularBuffer<T> {
 // Get stored process data from the store
 async function getStoredProcesses(): Promise<Record<string, StoredProcessData>> {
   const store = useProcessStore.getState();
-  // Ensure store is initialized
-  if (!store.isInitialized) {
-    await store.initializeStore();
-  }
+  await store.initializeStore();
   return store.getStoredProcesses();
 }
 
 // Store process data using the store
 async function storeProcesses(processes: Record<string, StoredProcessData>): Promise<void> {
   const store = useProcessStore.getState();
-  // Ensure store is initialized
-  if (!store.isInitialized) {
-    await store.initializeStore();
-  }
   await store.updateProcesses(processes);
 }
 
@@ -339,6 +332,7 @@ export async function startProcess(
     status: "running",
     outputFile,
     errorFile,
+    host,
   };
 
   // Clean up tail processes and files when main process exits
@@ -519,6 +513,33 @@ export function getAllRunningProcesses(): Map<string, ProcessInfo> {
 
 // Restore a process from stored data
 async function restoreProcessFromStorage(worktreePath: string, data: StoredProcessData): Promise<void> {
+  // If the process has a host, restore the allocation in the host store
+  if (data.host) {
+    const hostStore = (await import("#/stores/host-allocation-store")).default;
+    const state = hostStore.getState();
+
+    // Check if this host is already allocated to this worktree
+    const existingHost = state.getHostForWorktree(worktreePath);
+    if (!existingHost) {
+      // Manually add the allocation
+      const updatedAllocations = {
+        ...state.allocations,
+        [worktreePath]: {
+          host: data.host,
+          worktreePath,
+          allocatedAt: data.startTime,
+        },
+      };
+
+      // Update the store
+      hostStore.setState({ allocations: updatedAllocations });
+
+      // Persist to LocalStorage
+      const { LocalStorage } = await import("@raycast/api");
+      await LocalStorage.setItem("worktree-host-allocations", JSON.stringify(updatedAllocations));
+    }
+  }
+
   // Check if files still exist
   let hasOutputFile = false;
   let hasErrorFile = false;
@@ -580,6 +601,7 @@ async function restoreProcessFromStorage(worktreePath: string, data: StoredProce
       status: "running",
       outputFile: data.outputFile,
       errorFile: data.errorFile,
+      host: data.host,
     };
 
     // Array to store tail processes for cleanup
@@ -654,6 +676,10 @@ async function restoreProcessFromStorage(worktreePath: string, data: StoredProce
 
 // Clean up orphaned processes and restore running ones
 export async function cleanupOrphanedProcesses(): Promise<void> {
+  // Ensure process store is initialized
+  const store = useProcessStore.getState();
+  await store.initializeStore();
+
   // First, kill any orphaned tail processes
   try {
     // Find all tail processes that might be orphaned

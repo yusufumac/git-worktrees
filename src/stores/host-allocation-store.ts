@@ -6,6 +6,9 @@ const BASE_HOST = "127.0.0.";
 const START_HOST_INDEX = 2;
 const MAX_HOST_INDEX = 255;
 
+// Load initial data from LocalStorage
+const initialAllocations: Record<string, HostAllocation> = {};
+
 export interface HostAllocation {
   host: string;
   worktreePath: string;
@@ -14,43 +17,23 @@ export interface HostAllocation {
 
 interface HostAllocationState {
   allocations: Record<string, HostAllocation>;
-  isLoading: boolean;
-  isInitialized: boolean;
-  initializeStore: () => Promise<void>;
   allocateHost: (worktreePath: string) => Promise<string>;
   deallocateHost: (worktreePath: string) => Promise<void>;
   getHostForWorktree: (worktreePath: string) => string | null;
   cleanupStaleAllocations: (activeWorktreePaths: string[]) => Promise<void>;
+  // Keep for backward compatibility
+  initializeStore: () => Promise<void>;
 }
 
 const useHostAllocationStore = create<HostAllocationState>((set, get) => ({
-  allocations: {},
-  isLoading: false,
-  isInitialized: false,
+  allocations: initialAllocations,
 
+  // Keep for backward compatibility - no-op since already initialized
   initializeStore: async () => {
-    if (get().isInitialized) return;
-
-    set({ isLoading: true });
-    try {
-      const stored = await LocalStorage.getItem<string>(HOST_ALLOCATION_KEY);
-      const allocations = stored ? JSON.parse(stored) : {};
-      set({ allocations, isInitialized: true });
-    } catch {
-      set({ allocations: {}, isInitialized: true });
-    } finally {
-      set({ isLoading: false });
-    }
+    // No-op, already initialized on creation
   },
 
   allocateHost: async (worktreePath: string) => {
-    const state = get();
-
-    // Ensure store is initialized
-    if (!state.isInitialized) {
-      await state.initializeStore();
-    }
-
     const currentAllocations = get().allocations;
 
     // Check if already allocated
@@ -90,13 +73,6 @@ const useHostAllocationStore = create<HostAllocationState>((set, get) => ({
   },
 
   deallocateHost: async (worktreePath: string) => {
-    const state = get();
-
-    // Ensure store is initialized
-    if (!state.isInitialized) {
-      await state.initializeStore();
-    }
-
     const currentAllocations = { ...get().allocations };
     delete currentAllocations[worktreePath];
 
@@ -113,13 +89,6 @@ const useHostAllocationStore = create<HostAllocationState>((set, get) => ({
   },
 
   cleanupStaleAllocations: async (activeWorktreePaths: string[]) => {
-    const state = get();
-
-    // Ensure store is initialized
-    if (!state.isInitialized) {
-      await state.initializeStore();
-    }
-
     const currentAllocations = { ...get().allocations };
     const activePathsSet = new Set(activeWorktreePaths);
 
@@ -140,5 +109,17 @@ const useHostAllocationStore = create<HostAllocationState>((set, get) => ({
     }
   },
 }));
+
+// Load initial data after store creation
+(async () => {
+  try {
+    const stored = await LocalStorage.getItem<string>(HOST_ALLOCATION_KEY);
+    if (stored) {
+      useHostAllocationStore.setState({ allocations: JSON.parse(stored) });
+    }
+  } catch {
+    // Ignore errors
+  }
+})();
 
 export default useHostAllocationStore;

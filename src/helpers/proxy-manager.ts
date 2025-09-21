@@ -36,7 +36,7 @@ export async function setupProxyRoutes(worktreePath: string, targetHost: string,
   }
 
   // First, check if any other worktree is using the same ports and remove them
-  const allStates = await getAllProxyStates();
+  const allStates = getAllProxyStates();
   for (const [otherWorktreePath, state] of Object.entries(allStates)) {
     if (otherWorktreePath !== worktreePath && state.status === "active") {
       const conflictingPorts = state.ports.filter((p) => ports.includes(p));
@@ -163,7 +163,7 @@ export async function removeProxyRoutes(worktreePath: string): Promise<boolean> 
 
 // Get proxy state for a worktree
 export async function getProxyState(worktreePath: string): Promise<ProxyState | null> {
-  const allStates = await getAllProxyStates();
+  const allStates = getAllProxyStates();
   return allStates[worktreePath] || null;
 }
 
@@ -185,14 +185,14 @@ async function removeProxyState(worktreePath: string): Promise<void> {
 }
 
 // Get all proxy states
-async function getAllProxyStates(): Promise<Record<string, ProxyState>> {
+function getAllProxyStates(): Record<string, ProxyState> {
   const store = useProxyStore.getState();
   return store.getAllProxyStates();
 }
 
 // Stop all active proxies
 export async function stopAllProxies(): Promise<void> {
-  const allStates = await getAllProxyStates();
+  const allStates = getAllProxyStates();
   for (const [worktreePath, state] of Object.entries(allStates)) {
     if (state.status === "active") {
       await removeProxyRoutes(worktreePath);
