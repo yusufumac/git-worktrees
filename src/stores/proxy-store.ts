@@ -4,11 +4,11 @@ import type { ProxyState } from "#/config/types";
 
 const PROXY_STATE_KEY = "proxy-states";
 
+// Load initial data from LocalStorage synchronously if possible, async as fallback
+const initialProxyStates: Record<string, ProxyState> = {};
+
 interface ProxyStoreState {
   proxyStates: Record<string, ProxyState>;
-  isLoading: boolean;
-  isInitialized: boolean;
-  initializeStore: () => Promise<void>;
   saveProxyState: (worktreePath: string, state: ProxyState) => Promise<void>;
   removeProxyState: (worktreePath: string) => Promise<void>;
   getProxyState: (worktreePath: string) => ProxyState | null;
@@ -16,33 +16,9 @@ interface ProxyStoreState {
 }
 
 const useProxyStore = create<ProxyStoreState>((set, get) => ({
-  proxyStates: {},
-  isLoading: false,
-  isInitialized: false,
-
-  initializeStore: async () => {
-    if (get().isInitialized) return;
-
-    set({ isLoading: true });
-    try {
-      const stored = await LocalStorage.getItem<string>(PROXY_STATE_KEY);
-      const proxyStates = stored ? JSON.parse(stored) : {};
-      set({ proxyStates, isInitialized: true });
-    } catch {
-      set({ proxyStates: {}, isInitialized: true });
-    } finally {
-      set({ isLoading: false });
-    }
-  },
+  proxyStates: initialProxyStates,
 
   saveProxyState: async (worktreePath: string, state: ProxyState) => {
-    const currentState = get();
-
-    // Ensure store is initialized
-    if (!currentState.isInitialized) {
-      await currentState.initializeStore();
-    }
-
     const updatedStates = {
       ...get().proxyStates,
       [worktreePath]: state,
@@ -53,13 +29,6 @@ const useProxyStore = create<ProxyStoreState>((set, get) => ({
   },
 
   removeProxyState: async (worktreePath: string) => {
-    const currentState = get();
-
-    // Ensure store is initialized
-    if (!currentState.isInitialized) {
-      await currentState.initializeStore();
-    }
-
     const updatedStates = { ...get().proxyStates };
     delete updatedStates[worktreePath];
 
@@ -68,13 +37,25 @@ const useProxyStore = create<ProxyStoreState>((set, get) => ({
   },
 
   getProxyState: (worktreePath: string) => {
-    const state = get();
-    return state.proxyStates[worktreePath] || null;
+    return get().proxyStates[worktreePath] || null;
   },
 
   getAllProxyStates: () => {
     return get().proxyStates;
   },
 }));
+
+// Load initial data after store creation
+(async () => {
+  try {
+    const stored = await LocalStorage.getItem<string>(PROXY_STATE_KEY);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      useProxyStore.setState({ proxyStates: parsed });
+    }
+  } catch {
+    // Ignore errors
+  }
+})();
 
 export default useProxyStore;

@@ -1,34 +1,28 @@
-import { useEffect, useState, useCallback, useMemo } from "react";
-import { getProcessInfo, startProcessAndWaitForReady, stopProcess } from "#/helpers/process";
+import { useCallback, useMemo } from "react";
+import { startProcessAndWaitForReady, stopProcess } from "#/helpers/process";
 import useHostAllocationStore from "#/stores/host-allocation-store";
+import useProcessStore from "#/stores/process-store";
 import { showToast, Toast } from "@raycast/api";
 import { getPreferences } from "#/helpers/raycast";
 import { DEV_SERVER_TIMEOUT_MS_MONOREPO } from "#/config/constants";
-import { setupProxyRoutes, removeProxyRoutes, getProxyInfo, stopAllProxies } from "#/helpers/proxy-manager";
-import useProxyStore from "#/stores/proxy-store";
+import { setupProxyRoutes, removeProxyRoutes, getProxyInfo } from "#/helpers/proxy-manager";
 
 // Hook to monitor a dev server for a specific worktree
 export function useDevServer(worktreePath: string) {
-  const initialProcessInfo = getProcessInfo(worktreePath);
-
-  const [isRunning, setIsRunning] = useState(!!initialProcessInfo);
-  const [processInfo, setProcessInfo] = useState(initialProcessInfo);
   const preferences = getPreferences() as Preferences & { proxyPorts?: string };
 
   // Use Zustand store for host allocations
-  const { allocations, initializeStore, allocateHost, deallocateHost, getHostForWorktree } = useHostAllocationStore();
+  const { allocateHost, deallocateHost, getHostForWorktree } = useHostAllocationStore();
 
-  // Initialize proxy store
-  const { initializeStore: initProxyStore } = useProxyStore();
+  // Get process info from Zustand store (reactive)
+  const processInfo = useProcessStore((state) => state.getProcessInfo(worktreePath));
 
-  // Initialize stores on mount
-  useEffect(() => {
-    initializeStore();
-    initProxyStore();
-  }, [initializeStore, initProxyStore]);
+  // Derive state from store
+  const isRunning = !!processInfo && processInfo.status === "running";
 
-  // Extract host for this worktree only if process is running
-  const host = isRunning ? getHostForWorktree(worktreePath) : null;
+  // Extract host from process info or from allocation store
+  // Always check allocation store to show host even before process info is loaded
+  const host = processInfo?.host || getHostForWorktree(worktreePath);
 
   // Parse ports from preferences for proxy
   const configuredProxyPorts = useMemo(() => {
@@ -40,41 +34,24 @@ export function useDevServer(worktreePath: string) {
       .filter((p: number) => !isNaN(p) && p > 0 && p < 65536);
   }, [preferences.proxyPorts]);
 
-  useEffect(() => {
-    // Check process status periodically
-    const checkProcess = async () => {
-      const info = getProcessInfo(worktreePath);
-      setProcessInfo(info);
-      const wasRunning = isRunning;
-      const nowRunning = !!info;
-      setIsRunning(nowRunning);
-
-      // Clean up host allocation and proxy if process stopped externally
-      if (wasRunning && !nowRunning && allocations[worktreePath]) {
-        // Stop proxy if it's running for this worktree
-        const proxyInfo = await getProxyInfo(worktreePath);
-        if (proxyInfo && proxyInfo.status === "active") {
-          try {
-            await removeProxyRoutes(worktreePath);
-          } catch (error) {
-            console.error("Failed to stop proxy after external process stop:", error);
-          }
-        }
-
-        deallocateHost(worktreePath);
-      }
-    };
-
-    // Initial check
-    checkProcess();
-
-    const interval = setInterval(checkProcess, 2000);
-    return () => clearInterval(interval);
-  }, [worktreePath, isRunning, allocations, deallocateHost]);
+  // No cleanup effect needed - the proxy and host allocation should persist
+  // across component mounts/unmounts since the dev server continues running
+  // in the background. Cleanup happens when the process actually stops.
 
   const start = useCallback(async () => {
     let allocatedHost: string | undefined;
     try {
+      // Check if dev server is already running for this worktree
+      const currentProcess = useProcessStore.getState().getProcessInfo(worktreePath);
+      if (currentProcess && currentProcess.status === "running") {
+        await showToast({
+          style: Toast.Style.Failure,
+          title: "Dev Server Already Running",
+          message: `Already running on ${currentProcess.host}`,
+        });
+        return false;
+      }
+
       // Allocate a host for this worktree using the store
       allocatedHost = await allocateHost(worktreePath);
 
@@ -109,10 +86,8 @@ export function useDevServer(worktreePath: string) {
         // Start proxy if ports are configured
         if (configuredProxyPorts.length > 0) {
           try {
-            // Stop all existing proxies first to ensure only one proxy runs at a time
-            await stopAllProxies();
-
             // Start proxy for this dev server
+            // setupProxyRoutes will handle stopping conflicting proxies internally
             await setupProxyRoutes(worktreePath, allocatedHost, configuredProxyPorts);
           } catch (error) {
             // Log proxy error but don't fail the dev server start
