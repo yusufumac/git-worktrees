@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { LocalStorage } from "@raycast/api";
+import type { ChildProcess } from "child_process";
 
 const PROCESS_STORAGE_KEY = "worktree-processes";
 
@@ -13,8 +14,28 @@ export interface StoredProcessData {
   host?: string;
 }
 
+export interface ProcessInfo {
+  pid: number;
+  command: string;
+  args: string[];
+  cwd: string;
+  startTime: Date;
+  outputBuffer: string[];
+  errorBuffer: string[];
+  status: "running" | "stopped" | "error";
+  outputFile?: string;
+  errorFile?: string;
+}
+
+export interface RunningProcess {
+  process: ChildProcess;
+  info: ProcessInfo;
+  tailProcesses?: ChildProcess[];
+}
+
 interface ProcessState {
   processes: Record<string, StoredProcessData>;
+  runningProcesses: Map<string, RunningProcess>;
   isLoading: boolean;
   isInitialized: boolean;
   initializeStore: () => Promise<void>;
@@ -22,10 +43,17 @@ interface ProcessState {
   storeProcess: (worktreePath: string, processData: StoredProcessData) => Promise<void>;
   removeProcess: (worktreePath: string) => Promise<void>;
   updateProcesses: (processes: Record<string, StoredProcessData>) => Promise<void>;
+  // New methods for reactive process tracking
+  setRunningProcess: (worktreePath: string, processData: RunningProcess) => void;
+  removeRunningProcess: (worktreePath: string) => void;
+  getRunningProcess: (worktreePath: string) => RunningProcess | undefined;
+  getProcessInfo: (worktreePath: string) => ProcessInfo | null;
+  getAllRunningProcesses: () => Map<string, ProcessInfo>;
 }
 
 const useProcessStore = create<ProcessState>((set, get) => ({
   processes: {},
+  runningProcesses: new Map(),
   isLoading: false,
   isInitialized: false,
 
@@ -116,6 +144,36 @@ const useProcessStore = create<ProcessState>((set, get) => ({
 
     set({ processes });
     await LocalStorage.setItem(PROCESS_STORAGE_KEY, JSON.stringify(processes));
+  },
+
+  // New methods for reactive process tracking
+  setRunningProcess: (worktreePath: string, processData: RunningProcess) => {
+    const newMap = new Map(get().runningProcesses);
+    newMap.set(worktreePath, processData);
+    set({ runningProcesses: newMap });
+  },
+
+  removeRunningProcess: (worktreePath: string) => {
+    const newMap = new Map(get().runningProcesses);
+    newMap.delete(worktreePath);
+    set({ runningProcesses: newMap });
+  },
+
+  getRunningProcess: (worktreePath: string) => {
+    return get().runningProcesses.get(worktreePath);
+  },
+
+  getProcessInfo: (worktreePath: string) => {
+    const running = get().runningProcesses.get(worktreePath);
+    return running?.info || null;
+  },
+
+  getAllRunningProcesses: () => {
+    const result = new Map<string, ProcessInfo>();
+    get().runningProcesses.forEach((value, key) => {
+      result.set(key, value.info);
+    });
+    return result;
   },
 }));
 

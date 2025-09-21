@@ -4,20 +4,9 @@ import { executeCommand } from "./general";
 import { deallocateHost } from "./host-manager";
 import { getUserShell, buildCommandWithProfile } from "./shell";
 import { DEV_SERVER_SUCCESS_MESSAGE } from "#/config/constants";
-import useProcessStore, { type StoredProcessData } from "#/stores/process-store";
+import useProcessStore, { type StoredProcessData, type ProcessInfo, type RunningProcess } from "#/stores/process-store";
 
-export interface ProcessInfo {
-  pid: number;
-  command: string;
-  args: string[];
-  cwd: string;
-  startTime: Date;
-  outputBuffer: string[];
-  errorBuffer: string[];
-  status: "running" | "stopped" | "error";
-  outputFile?: string;
-  errorFile?: string;
-}
+export type { ProcessInfo } from "#/stores/process-store";
 
 export interface ProcessOutput {
   type: "stdout" | "stderr";
@@ -26,12 +15,6 @@ export interface ProcessOutput {
 }
 
 const MAX_OUTPUT_LINES = 50000; // Increased buffer size for more output
-
-// Map to store running processes in memory
-const runningProcesses = new Map<
-  string,
-  { process: ChildProcess; info: ProcessInfo; tailProcesses?: ChildProcess[] }
->();
 
 // Circular buffer implementation for output storage
 class CircularBuffer<T> {
@@ -86,6 +69,19 @@ async function storeProcesses(processes: Record<string, StoredProcessData>): Pro
     await store.initializeStore();
   }
   await store.updateProcesses(processes);
+}
+
+// Helper functions to access running processes from store
+function getRunningProcess(worktreePath: string): RunningProcess | undefined {
+  return useProcessStore.getState().getRunningProcess(worktreePath);
+}
+
+function setRunningProcess(worktreePath: string, processData: RunningProcess): void {
+  useProcessStore.getState().setRunningProcess(worktreePath, processData);
+}
+
+function removeRunningProcess(worktreePath: string): void {
+  useProcessStore.getState().removeRunningProcess(worktreePath);
 }
 
 // Check if a process is still running
@@ -235,7 +231,7 @@ export async function startProcess(
   }
 
   // Stop any running process we're tracking
-  const existing = runningProcesses.get(worktreePath);
+  const existing = getRunningProcess(worktreePath);
   if (existing) {
     await stopProcess(worktreePath);
   }
@@ -364,7 +360,7 @@ export async function startProcess(
       // Update status
       info.status = "stopped";
       // Emit exit event
-      runningProcesses.delete(worktreePath);
+      removeRunningProcess(worktreePath);
       const stored = await getStoredProcesses();
       if (stored[worktreePath]) {
         await deallocateHost(worktreePath);
@@ -408,7 +404,7 @@ export async function startProcess(
   // Errors will be captured in the stderr file instead
 
   // Store process info with tail processes for cleanup
-  runningProcesses.set(worktreePath, { process: childProcess, info, tailProcesses: [tailStdout, tailStderr] });
+  setRunningProcess(worktreePath, { process: childProcess, info, tailProcesses: [tailStdout, tailStderr] });
 
   // Update LocalStorage with full process data
   const stored = await getStoredProcesses();
@@ -436,7 +432,7 @@ export async function stopProcess(worktreePath: string): Promise<void> {
   // Invalidate cache when stopping a process
   invalidateProcessCache();
 
-  const running = runningProcesses.get(worktreePath);
+  const running = getRunningProcess(worktreePath);
 
   if (running) {
     const { info, tailProcesses } = running;
@@ -498,7 +494,7 @@ export async function stopProcess(worktreePath: string): Promise<void> {
     }
 
     info.status = "stopped";
-    runningProcesses.delete(worktreePath);
+    removeRunningProcess(worktreePath);
   }
 
   // Update stored processes and deallocate host
@@ -513,19 +509,12 @@ export async function stopProcess(worktreePath: string): Promise<void> {
 
 // Get process info for a worktree
 export function getProcessInfo(worktreePath: string): ProcessInfo | null {
-  const running = runningProcesses.get(worktreePath);
-  return running?.info || null;
+  return useProcessStore.getState().getProcessInfo(worktreePath);
 }
 
 // Get all running processes
 export function getAllRunningProcesses(): Map<string, ProcessInfo> {
-  const result = new Map<string, ProcessInfo>();
-
-  runningProcesses.forEach((value, key) => {
-    result.set(key, value.info);
-  });
-
-  return result;
+  return useProcessStore.getState().getAllRunningProcesses();
 }
 
 // Restore a process from stored data
@@ -636,7 +625,7 @@ async function restoreProcessFromStorage(worktreePath: string, data: StoredProce
     }
 
     // Store in running processes map (without ChildProcess since it's detached)
-    runningProcesses.set(worktreePath, { process: {} as ChildProcess, info, tailProcesses });
+    setRunningProcess(worktreePath, { process: {} as ChildProcess, info, tailProcesses });
 
     // Monitor the process
     const monitorProcess = setInterval(async () => {
@@ -651,7 +640,7 @@ async function restoreProcessFromStorage(worktreePath: string, data: StoredProce
             // Tail process might already be dead
           }
         });
-        runningProcesses.delete(worktreePath);
+        removeRunningProcess(worktreePath);
         const stored = await getStoredProcesses();
         if (stored[worktreePath]) {
           await deallocateHost(worktreePath);
