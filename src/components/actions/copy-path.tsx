@@ -5,7 +5,7 @@ export const CopyPath = ({ path }: { path: string }) => {
     <Action
       title="Copy Path"
       icon={Icon.Clipboard}
-      shortcut={{ modifiers: ["cmd", "shift"], key: "." }}
+      shortcut={{ modifiers: ["cmd"], key: "." }}
       onAction={async () => {
         await Clipboard.copy(path);
         await showToast({
