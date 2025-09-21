@@ -1,14 +1,17 @@
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import { showToast, Toast } from "@raycast/api";
 import { getPreferences } from "#/helpers/raycast";
 import { getHostForWorktree } from "#/helpers/host-manager";
-import { setupProxyRoutes, removeProxyRoutes, getProxyInfo, isProxyServerInstalled } from "#/helpers/proxy-manager";
+import { setupProxyRoutes, removeProxyRoutes, isProxyServerInstalled } from "#/helpers/proxy-manager";
+import useProxyStore from "#/stores/proxy-store";
 
 export function useProxy(worktreePath: string) {
   const preferences = getPreferences() as Preferences & { proxyPorts?: string };
-  const [isProxying, setIsProxying] = useState(false);
-  const [proxiedPorts, setProxiedPorts] = useState<number[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+
+  // Get proxy state from Zustand store
+  const proxyState = useProxyStore((state) => state.getProxyState(worktreePath));
+  const _ensureInitialized = useProxyStore((state) => state._ensureInitialized);
 
   // Parse ports from preferences
   const configuredPorts = useMemo(() => {
@@ -20,23 +23,14 @@ export function useProxy(worktreePath: string) {
       .filter((p: number) => !isNaN(p) && p > 0 && p < 65536);
   }, [preferences.proxyPorts]);
 
-  // Check proxy status on mount and periodically
+  // Trigger initialization on mount (fire and forget)
   useEffect(() => {
-    const checkProxyStatus = async () => {
-      const proxyInfo = await getProxyInfo(worktreePath);
-      if (proxyInfo && proxyInfo.status === "active") {
-        setIsProxying(true);
-        setProxiedPorts(proxyInfo.ports);
-      } else {
-        setIsProxying(false);
-        setProxiedPorts([]);
-      }
-    };
+    _ensureInitialized();
+  }, [_ensureInitialized]);
 
-    checkProxyStatus();
-    const interval = setInterval(checkProxyStatus, 2000);
-    return () => clearInterval(interval);
-  }, [worktreePath]);
+  // Derive state from store
+  const isProxying = proxyState?.status === "active" || false;
+  const proxiedPorts = proxyState?.ports || [];
 
   const startProxy = useCallback(async () => {
     if (configuredPorts.length === 0) {
@@ -72,10 +66,7 @@ export function useProxy(worktreePath: string) {
     setIsLoading(true);
     try {
       const success = await setupProxyRoutes(worktreePath, host, configuredPorts);
-      if (success) {
-        setIsProxying(true);
-        setProxiedPorts(configuredPorts);
-      }
+      // Store update is handled in setupProxyRoutes
       return success;
     } finally {
       setIsLoading(false);
@@ -86,10 +77,7 @@ export function useProxy(worktreePath: string) {
     setIsLoading(true);
     try {
       const success = await removeProxyRoutes(worktreePath);
-      if (success) {
-        setIsProxying(false);
-        setProxiedPorts([]);
-      }
+      // Store update is handled in removeProxyRoutes
       return success;
     } finally {
       setIsLoading(false);

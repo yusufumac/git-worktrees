@@ -175,30 +175,18 @@ export async function getProxyInfo(worktreePath: string): Promise<ProxyState | n
 // Save proxy state
 async function saveProxyState(worktreePath: string, state: ProxyState): Promise<void> {
   const store = useProxyStore.getState();
-  // Ensure store is initialized
-  if (!store.isInitialized) {
-    await store.initializeStore();
-  }
   await store.saveProxyState(worktreePath, state);
 }
 
 // Remove proxy state
 async function removeProxyState(worktreePath: string): Promise<void> {
   const store = useProxyStore.getState();
-  // Ensure store is initialized
-  if (!store.isInitialized) {
-    await store.initializeStore();
-  }
   await store.removeProxyState(worktreePath);
 }
 
 // Get all proxy states
 async function getAllProxyStates(): Promise<Record<string, ProxyState>> {
   const store = useProxyStore.getState();
-  // Ensure store is initialized
-  if (!store.isInitialized) {
-    await store.initializeStore();
-  }
   return store.getAllProxyStates();
 }
 

@@ -19,13 +19,13 @@ export function useDevServer(worktreePath: string) {
   const { allocations, initializeStore, allocateHost, deallocateHost, getHostForWorktree } = useHostAllocationStore();
 
   // Initialize proxy store
-  const { initializeStore: initProxyStore } = useProxyStore();
+  const _ensureProxyInitialized = useProxyStore((state) => state._ensureInitialized);
 
   // Initialize stores on mount
   useEffect(() => {
     initializeStore();
-    initProxyStore();
-  }, [initializeStore, initProxyStore]);
+    _ensureProxyInitialized();
+  }, [initializeStore, _ensureProxyInitialized]);
 
   // Extract host for this worktree only if process is running
   const host = isRunning ? getHostForWorktree(worktreePath) : null;
