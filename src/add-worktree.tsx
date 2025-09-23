@@ -105,8 +105,6 @@ export default function Command({ directory: initialDirectory }: { directory?: s
             trackingBranch: values.trackingBranch,
             parentPath: directory,
           });
-
-          revalidateProjects();
         } else {
           if (!isExistingBranch) {
             toast.style = Toast.Style.Failure;
@@ -151,6 +149,9 @@ export default function Command({ directory: initialDirectory }: { directory?: s
             },
           });
         }
+
+        // Revalidate projects after cache update to ensure the list is refreshed
+        revalidateProjects();
 
         toast.style = Toast.Style.Success;
         toast.title = "Worktree Created";
