@@ -47,6 +47,13 @@
       "subtitle": "Git Worktrees",
       "description": "View output from running worktree processes",
       "mode": "view"
+    },
+    {
+      "name": "add-worktree-from-linear",
+      "title": "Add Worktree from Linear",
+      "subtitle": "Git Worktrees",
+      "description": "Create a worktree from a Linear issue",
+      "mode": "view"
     }
   ],
   "preferences": [
@@ -277,6 +284,14 @@
       "required": false,
       "default": "",
       "placeholder": "3000,5173,8080"
+    },
+    {
+      "type": "password",
+      "name": "linearApiKey",
+      "title": "Linear API Key",
+      "description": "Your Linear API key for accessing Linear issues",
+      "required": false,
+      "placeholder": "lin_api_..."
     }
   ],
   "dependencies": {
