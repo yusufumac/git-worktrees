@@ -1,10 +1,10 @@
 import { shouldOpenWorktree } from "#/helpers/general";
 import { withToast } from "#/helpers/toast";
 import { useProjects } from "#/hooks/use-projects";
-import { Action, ActionPanel, Icon, List, open, showToast, Toast, useNavigation } from "@raycast/api";
+import { Action, ActionPanel, Icon, List, LocalStorage, open, showToast, Toast, useNavigation } from "@raycast/api";
 import { useCachedPromise } from "@raycast/utils";
 import path from "node:path";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { CACHE_KEYS } from "./config/constants";
 import { Project } from "./config/types";
 import { updateCache } from "./helpers/cache";
@@ -19,6 +19,8 @@ import {
 import { fetchLinearIssues, LinearIssue } from "./helpers/linear";
 import { getPreferences, resizeEditorWindow } from "./helpers/raycast";
 
+const LAST_SELECTED_PROJECT_KEY = "linear-last-selected-project";
+
 export default function Command() {
   const { pop } = useNavigation();
   const [searchText, setSearchText] = useState("");
@@ -31,6 +33,26 @@ export default function Command() {
 
   // Extract bare repositories from projects
   const bareRepos = projects.map(({ id: _id, worktrees: _worktrees, ...project }) => project);
+
+  // Load last selected project on mount
+  useEffect(() => {
+    LocalStorage.getItem<string>(LAST_SELECTED_PROJECT_KEY).then((stored) => {
+      if (stored && !selectedProject) {
+        // Only set if project still exists
+        const projectExists = bareRepos.some((p) => p.fullPath === stored);
+        if (projectExists) {
+          setSelectedProject(stored);
+        }
+      }
+    });
+  }, [bareRepos]);
+
+  // Save selected project when it changes
+  useEffect(() => {
+    if (selectedProject) {
+      LocalStorage.setItem(LAST_SELECTED_PROJECT_KEY, selectedProject);
+    }
+  }, [selectedProject]);
 
   // Fetch Linear issues with network search
   const { isLoading: isLoadingIssues, data: issues = [] } = useCachedPromise(
