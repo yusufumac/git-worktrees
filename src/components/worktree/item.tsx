@@ -31,6 +31,7 @@ export const Item = memo(
     revalidateProjects,
     sortOrder,
     setSortOrder,
+    customPrimaryAction,
   }: {
     project?: BareRepository;
     worktree: Worktree;
@@ -39,6 +40,7 @@ export const Item = memo(
     revalidateProjects: () => void;
     sortOrder?: WorktreeSortOrder;
     setSortOrder?: (order: WorktreeSortOrder) => void;
+    customPrimaryAction?: "proxy";
   }) => {
     const { projectsPath } = getPreferences();
     const gitRemote = project?.gitRemotes?.[0];
@@ -87,27 +89,52 @@ export const Item = memo(
         actions={
           <ActionPanel>
             <ActionPanel.Section title="Worktree Actions">
-              <OpenEditor
-                worktree={worktree}
-                extraActions={async () => {
-                  await Promise.all([rankBareRepository?.("increment"), rankWorktree?.("increment")]);
-                }}
-              />
-              <OpenTerminal path={worktree.path} />
-              <CopyPath path={worktree.path} />
+              {customPrimaryAction === "proxy" && isRunning ? (
+                <>
+                  <BindToLocalhost
+                    worktree={worktree}
+                    onProxyStart={revalidateProjects}
+                    onProxyStop={revalidateProjects}
+                  />
+                  <RunDevServer
+                    worktree={worktree}
+                    onProcessStart={revalidateProjects}
+                    onProcessStop={revalidateProjects}
+                  />
+                  <OpenEditor
+                    worktree={worktree}
+                    extraActions={async () => {
+                      await Promise.all([rankBareRepository?.("increment"), rankWorktree?.("increment")]);
+                    }}
+                  />
+                  <OpenTerminal path={worktree.path} />
+                  <CopyPath path={worktree.path} />
+                </>
+              ) : (
+                <>
+                  <OpenEditor
+                    worktree={worktree}
+                    extraActions={async () => {
+                      await Promise.all([rankBareRepository?.("increment"), rankWorktree?.("increment")]);
+                    }}
+                  />
+                  <OpenTerminal path={worktree.path} />
+                  <CopyPath path={worktree.path} />
 
-              <RunDevServer
-                worktree={worktree}
-                onProcessStart={revalidateProjects}
-                onProcessStop={revalidateProjects}
-              />
+                  <RunDevServer
+                    worktree={worktree}
+                    onProcessStart={revalidateProjects}
+                    onProcessStop={revalidateProjects}
+                  />
 
-              {isRunning && (
-                <BindToLocalhost
-                  worktree={worktree}
-                  onProxyStart={revalidateProjects}
-                  onProxyStop={revalidateProjects}
-                />
+                  {isRunning && (
+                    <BindToLocalhost
+                      worktree={worktree}
+                      onProxyStart={revalidateProjects}
+                      onProxyStop={revalidateProjects}
+                    />
+                  )}
+                </>
               )}
 
               {processInfo && (

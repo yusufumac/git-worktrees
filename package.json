@@ -54,6 +54,13 @@
       "subtitle": "Git Worktrees",
       "description": "Create a worktree from a Linear issue",
       "mode": "view"
+    },
+    {
+      "name": "switch-dev-servers",
+      "title": "Switch Dev Servers",
+      "subtitle": "Git Worktrees",
+      "description": "Switch localhost proxy between running dev servers",
+      "mode": "view"
     }
   ],
   "preferences": [
