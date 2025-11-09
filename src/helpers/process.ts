@@ -196,6 +196,7 @@ export async function startProcess(
   args: string[] = [],
   onOutput?: (output: ProcessOutput) => void,
   host?: string,
+  trackProcess: boolean = true, // New parameter: whether to track this process in LocalStorage
 ): Promise<ProcessInfo> {
   // Invalidate cache when starting a process
   invalidateProcessCache();
@@ -397,21 +398,24 @@ export async function startProcess(
   // Handle process error (detached processes don't emit error events to parent)
   // Errors will be captured in the stderr file instead
 
-  // Store process info with tail processes for cleanup
-  setRunningProcess(worktreePath, { process: childProcess, info, tailProcesses: [tailStdout, tailStderr] });
+  // Only track process if requested (don't track setup scripts)
+  if (trackProcess) {
+    // Store process info with tail processes for cleanup
+    setRunningProcess(worktreePath, { process: childProcess, info, tailProcesses: [tailStdout, tailStderr] });
 
-  // Update LocalStorage with full process data
-  const stored = await getStoredProcesses();
-  stored[worktreePath] = {
-    pid: childProcess.pid!,
-    command,
-    args,
-    outputFile,
-    errorFile,
-    startTime: info.startTime.toISOString(),
-    host,
-  };
-  await storeProcesses(stored);
+    // Update LocalStorage with full process data
+    const stored = await getStoredProcesses();
+    stored[worktreePath] = {
+      pid: childProcess.pid!,
+      command,
+      args,
+      outputFile,
+      errorFile,
+      startTime: info.startTime.toISOString(),
+      host,
+    };
+    await storeProcesses(stored);
+  }
 
   // Add minimal initial message if no output yet
   if (info.outputBuffer.length === 0 && info.errorBuffer.length === 0) {
@@ -707,10 +711,29 @@ export async function cleanupOrphanedProcesses(): Promise<void> {
   const stored = await getStoredProcesses();
 
   for (const [path, data] of Object.entries(stored)) {
+    // Check if the worktree directory still exists
+    let directoryExists = false;
+    try {
+      const { stdout: dirCheck } = await executeCommand(`test -d "${path}" && echo "exists"`);
+      directoryExists = dirCheck.trim() === "exists";
+    } catch {
+      directoryExists = false;
+    }
+
+    // If directory doesn't exist, clean up the process info
+    if (!directoryExists) {
+      delete stored[path];
+      await deallocateHost(path);
+      continue;
+    }
+
+    // Check if process is still running
     const isRunning = await isProcessRunning(data.pid);
 
     if (!isRunning) {
+      // Process is dead - clean it up
       delete stored[path];
+      await deallocateHost(path);
     } else {
       // Process is still running, try to restore it
       await restoreProcessFromStorage(path, data);

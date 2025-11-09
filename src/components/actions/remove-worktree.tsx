@@ -88,6 +88,21 @@ export const RemoveWorktree = ({
     if (worktree.branch) await removeBranch({ path: projectPath, branch: worktree.branch });
     await pruneWorktrees({ path: projectPath });
 
+    // Ensure process info is removed from LocalStorage even if stopProcess wasn't called or failed
+    try {
+      const processStore = (await import("#/stores/process-store")).default;
+      const stored = processStore.getState().getStoredProcesses();
+      if (stored[worktree.path]) {
+        const { deallocateHost } = await import("#/helpers/host-manager");
+        await deallocateHost(worktree.path);
+        delete stored[worktree.path];
+        await processStore.getState().updateProcesses(stored);
+      }
+    } catch (error) {
+      console.error("Failed to clean up process info:", error);
+      // Continue anyway
+    }
+
     toast.style = Toast.Style.Success;
     toast.title = "Worktree Removed";
     toast.message = "The worktree has been removed";
