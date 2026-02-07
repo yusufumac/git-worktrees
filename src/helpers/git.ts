@@ -353,17 +353,8 @@ export const runSetupScript = async (worktreePath: string) => {
 
   if (!setupScript) return;
 
-  // Use startProcess with trackProcess=false to run setup script
-  // This gives us proper PATH resolution without tracking it as a dev server
-  const { startProcess } = await import("./process");
-
   try {
-    const commandParts = setupScript.split(/\s+/);
-    const command = commandParts[0];
-    const args = commandParts.slice(1);
-
-    // Start process but don't track it (trackProcess=false)
-    await startProcess(worktreePath, command, args, undefined, undefined, false);
+    await executeCommand(setupScript, { cwd: worktreePath });
   } catch (e: unknown) {
     throw Error(`Setup script failed: ${e instanceof Error ? e.message : "Unknown error occurred"}`);
   }

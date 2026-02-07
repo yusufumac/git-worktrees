@@ -8,14 +8,13 @@ import { RemoveWorktree } from "#/components/actions/remove-worktree";
 import { RenameWorktree } from "#/components/actions/rename-worktree";
 import { ResetRanking } from "#/components/actions/reset-ranking";
 import { RunDevServer } from "#/components/actions/run-dev-server";
-import { BindToLocalhost } from "#/components/actions/bind-to-localhost";
 import type { BareRepository, Worktree } from "#/config/types";
 import type { WorktreeSortOrder } from "./list";
 import { getPreferences } from "#/helpers/raycast";
+import { enableProxy, disableProxy } from "#/helpers/wt-serve-client";
 import { useBranchInformation } from "#/hooks/use-branch-information";
 import { useDevServer } from "#/hooks/use-dev-server";
-import { useProxy } from "#/hooks/use-proxy";
-import { Action, ActionPanel, Color, Icon, List } from "@raycast/api";
+import { Action, ActionPanel, Color, Icon, List, showToast, Toast } from "@raycast/api";
 import { relative } from "node:path";
 import { memo } from "react";
 import AddWorktree from "../../add-worktree";
@@ -31,7 +30,6 @@ export const Item = memo(
     revalidateProjects,
     sortOrder,
     setSortOrder,
-    customPrimaryAction,
   }: {
     project?: BareRepository;
     worktree: Worktree;
@@ -40,14 +38,13 @@ export const Item = memo(
     revalidateProjects: () => void;
     sortOrder?: WorktreeSortOrder;
     setSortOrder?: (order: WorktreeSortOrder) => void;
-    customPrimaryAction?: "proxy";
   }) => {
     const { projectsPath } = getPreferences();
     const gitRemote = project?.gitRemotes?.[0];
 
     const branchInformation = useBranchInformation({ path: worktree.path });
     const { isRunning, processInfo, host } = useDevServer(worktree.path);
-    const { isProxying } = useProxy(worktree.path);
+    const isProxying = processInfo?.proxy?.status === "active";
 
     const isDirty = branchInformation.isDirty === undefined ? worktree.dirty : branchInformation.isDirty;
     const currentCommit = branchInformation.commit === undefined ? worktree.commit : branchInformation.commit;
@@ -89,52 +86,44 @@ export const Item = memo(
         actions={
           <ActionPanel>
             <ActionPanel.Section title="Worktree Actions">
-              {customPrimaryAction === "proxy" && isRunning ? (
-                <>
-                  <BindToLocalhost
-                    worktree={worktree}
-                    onProxyStart={revalidateProjects}
-                    onProxyStop={revalidateProjects}
-                  />
-                  <RunDevServer
-                    worktree={worktree}
-                    onProcessStart={revalidateProjects}
-                    onProcessStop={revalidateProjects}
-                  />
-                  <OpenEditor
-                    worktree={worktree}
-                    extraActions={async () => {
-                      await Promise.all([rankBareRepository?.("increment"), rankWorktree?.("increment")]);
-                    }}
-                  />
-                  <OpenTerminal path={worktree.path} />
-                  <CopyPath path={worktree.path} />
-                </>
-              ) : (
-                <>
-                  <OpenEditor
-                    worktree={worktree}
-                    extraActions={async () => {
-                      await Promise.all([rankBareRepository?.("increment"), rankWorktree?.("increment")]);
-                    }}
-                  />
-                  <OpenTerminal path={worktree.path} />
-                  <CopyPath path={worktree.path} />
+              <OpenEditor
+                worktree={worktree}
+                extraActions={async () => {
+                  await Promise.all([rankBareRepository?.("increment"), rankWorktree?.("increment")]);
+                }}
+              />
+              <OpenTerminal path={worktree.path} />
+              <CopyPath path={worktree.path} />
 
-                  <RunDevServer
-                    worktree={worktree}
-                    onProcessStart={revalidateProjects}
-                    onProcessStop={revalidateProjects}
-                  />
+              <RunDevServer
+                worktree={worktree}
+                onProcessStart={revalidateProjects}
+                onProcessStop={revalidateProjects}
+              />
 
-                  {isRunning && (
-                    <BindToLocalhost
-                      worktree={worktree}
-                      onProxyStart={revalidateProjects}
-                      onProxyStop={revalidateProjects}
-                    />
-                  )}
-                </>
+              {isRunning && (
+                <Action
+                  title={isProxying ? "Unbind from Localhost" : "Bind to Localhost"}
+                  icon={isProxying ? Icon.XMarkCircle : Icon.Link}
+                  shortcut={{ modifiers: ["cmd"], key: "l" }}
+                  onAction={async () => {
+                    try {
+                      if (isProxying) {
+                        await disableProxy(worktree.path);
+                        await showToast({ style: Toast.Style.Success, title: "Proxy Disabled" });
+                      } else {
+                        await enableProxy(worktree.path);
+                        await showToast({ style: Toast.Style.Success, title: "Proxy Enabled" });
+                      }
+                    } catch (err) {
+                      await showToast({
+                        style: Toast.Style.Failure,
+                        title: "Proxy Error",
+                        message: err instanceof Error ? err.message : "Unknown error",
+                      });
+                    }
+                  }}
+                />
               )}
 
               {processInfo && (

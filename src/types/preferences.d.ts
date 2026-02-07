@@ -16,6 +16,4 @@ declare interface Preferences {
   branchPrefixesToRemove?: string;
   setupScript?: string;
   shouldAutomaticallyOpenWorktree?: boolean;
-  runScript?: string;
-  proxyPorts?: string;
 }

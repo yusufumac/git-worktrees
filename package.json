@@ -275,24 +275,6 @@
       "placeholder": "pnpm install"
     },
     {
-      "type": "textfield",
-      "name": "runScript",
-      "title": "Run Script",
-      "description": "The full command to run dev servers (e.g., 'pnpm run dev', 'npm start', 'yarn dev')",
-      "required": false,
-      "default": "pnpm run dev",
-      "placeholder": "pnpm run dev"
-    },
-    {
-      "type": "textfield",
-      "name": "proxyPorts",
-      "title": "Proxy Ports",
-      "description": "Comma-separated list of ports to proxy from localhost to dev server host (e.g., '3000,5173,8080')",
-      "required": false,
-      "default": "",
-      "placeholder": "3000,5173,8080"
-    },
-    {
       "type": "password",
       "name": "linearApiKey",
       "title": "Linear API Key",

@@ -1,10 +1,10 @@
 import { Detail, Icon } from "@raycast/api";
 import { useEffect, useState } from "react";
-import { getProcessDetails, type ProcessInfo } from "#/helpers/process";
+import { getServerDetails, type ServerInfo } from "#/helpers/wt-serve-client";
 
 interface ProcessDetailsProps {
   worktreePath: string;
-  processInfo?: ProcessInfo | null;
+  processInfo?: ServerInfo | null;
 }
 
 export function ProcessDetails({ worktreePath, processInfo }: ProcessDetailsProps) {
@@ -15,9 +15,26 @@ export function ProcessDetails({ worktreePath, processInfo }: ProcessDetailsProp
     async function loadDetails() {
       setIsLoading(true);
       try {
-        const pidToCheck = processInfo?.pid;
-        const detailsText = await getProcessDetails(worktreePath, pidToCheck);
-        setDetails(detailsText);
+        const data = await getServerDetails(worktreePath);
+        const lines: string[] = [];
+        if (data.command) lines.push(`**Command:** \`${data.command}\``);
+        if (data.cpu) {
+          lines.push("## Resource Usage\n");
+          lines.push(`**CPU:** ${data.cpu}%`);
+          lines.push(`**Memory:** ${data.memory}%`);
+          if (data.rss) lines.push(`**RSS:** ${data.rss}`);
+        }
+        if (data.ports && Array.isArray(data.ports)) {
+          lines.push("## Open Ports\n");
+          (data.ports as string[]).forEach((p) => lines.push(`- ${p}`));
+        }
+        if (data.host) {
+          lines.push("## Host Information\n");
+          lines.push(`**Allocated Host:** ${data.host}`);
+        }
+        lines.push("---");
+        lines.push(`*Last updated: ${new Date().toLocaleString()}*`);
+        setDetails(lines.join("\n"));
       } catch (error) {
         setDetails(`Failed to load process details: ${error}`);
       } finally {
@@ -34,7 +51,7 @@ export function ProcessDetails({ worktreePath, processInfo }: ProcessDetailsProp
 
 **Worktree Path:** ${worktreePath}
 
-**Process Type:** Managed (started by Raycast)
+**Process Type:** Managed (started by wt-serve)
 
 ${displayPid ? `**PID:** ${displayPid}` : ""}
 

@@ -1,6 +1,6 @@
 import { Detail, ActionPanel, Action, Icon } from "@raycast/api";
 import { useState, useEffect, useRef } from "react";
-import { getProcessInfo, stopProcess } from "#/helpers/process";
+import { getLogs, stopServer } from "#/helpers/wt-serve-client";
 import stripAnsi from "strip-ansi";
 
 interface ProcessOutputViewProps {
@@ -13,51 +13,33 @@ export const ProcessOutputView = ({ worktreePath, onClose }: ProcessOutputViewPr
   const [processStatus, setProcessStatus] = useState<"running" | "stopped" | "error">("running");
   const outputRef = useRef<string[]>([]);
 
-  // Display last 500 lines
   const DISPLAY_LINES = 500;
 
   useEffect(() => {
-    // Load initial output from process info
-    const processInfo = getProcessInfo(worktreePath);
+    let active = true;
 
-    if (processInfo) {
-      const combinedOutput = [
-        ...processInfo.outputBuffer.map((line) => `[stdout] ${line}`),
-        ...processInfo.errorBuffer.map((line) => `[stderr] ${line}`),
-      ];
-
-      outputRef.current = combinedOutput;
-      setOutput(combinedOutput);
-      setProcessStatus(processInfo.status);
-    }
-  }, [worktreePath]);
-
-  // Poll for updates
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const processInfo = getProcessInfo(worktreePath);
-      if (processInfo) {
-        const combinedOutput = [
-          ...processInfo.outputBuffer.map((line) => `[stdout] ${line}`),
-          ...processInfo.errorBuffer.map((line) => `[stderr] ${line}`),
-        ];
-
-        if (combinedOutput.length !== outputRef.current.length) {
-          outputRef.current = combinedOutput;
-          setOutput(combinedOutput);
+    const poll = async () => {
+      try {
+        const logs = await getLogs(worktreePath, 1000);
+        if (!active) return;
+        const lines = logs.map((l) => `[${l.type}] ${l.data}`);
+        if (lines.length !== outputRef.current.length) {
+          outputRef.current = lines;
+          setOutput(lines);
         }
-
-        setProcessStatus(processInfo.status);
-      } else {
-        setProcessStatus("stopped");
+        setProcessStatus("running");
+      } catch {
+        if (active) setProcessStatus("stopped");
       }
-    }, 500);
+    };
 
-    return () => clearInterval(interval);
+    poll();
+    const interval = setInterval(poll, 500);
+    return () => { active = false; clearInterval(interval); };
   }, [worktreePath]);
 
   const handleStop = async () => {
-    await stopProcess(worktreePath);
+    await stopServer(worktreePath);
     setProcessStatus("stopped");
   };
 
@@ -66,9 +48,7 @@ export const ProcessOutputView = ({ worktreePath, onClose }: ProcessOutputViewPr
     navigator.clipboard.writeText(outputText);
   };
 
-  // Process the output to strip ANSI colors for clean display - always show last N lines
   const processedOutput = output.slice(-DISPLAY_LINES).map((line) => {
-    // Remove the [stdout] or [stderr] prefix and strip ANSI codes for cleaner output
     const cleanLine = line.replace(/^\[(stdout|stderr)\] /, "");
     return stripAnsi(cleanLine);
   });

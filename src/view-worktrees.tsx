@@ -1,10 +1,9 @@
 import ClearCache from "#/components/actions/clear-cache";
 import { getPreferences } from "#/helpers/raycast";
 import { useProjects } from "#/hooks/use-projects";
-import { cleanupOrphanedProcesses } from "#/helpers/process";
 import { Action, ActionPanel, Icon, List, openExtensionPreferences } from "@raycast/api";
 import { relative } from "node:path";
-import { useMemo, useEffect } from "react";
+import { useMemo } from "react";
 import AddWorktree from "./add-worktree";
 import CloneProject from "./clone-project";
 import { DirectoriesDropdown, useDirectory } from "./components/actions/directories-dropdown";
@@ -38,13 +37,6 @@ export default function Command({ projectId }: { projectId?: string }) {
 
     return [projects, worktrees];
   }, [directory, incomingProjects, preferences.enableProjectsFrequencySorting, enableWorktreesGrouping]);
-
-  // Clean up orphaned processes on mount
-  useEffect(() => {
-    cleanupOrphanedProcesses().catch(() => {
-      // Silent error
-    });
-  }, []);
 
   if (projectId) {
     const project = incomingProjects?.find((p) => p.id === projectId);

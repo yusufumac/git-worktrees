@@ -35,19 +35,3 @@ export interface Repo {
   icon: Image;
 }
 
-// Proxy related types
-export interface ProxyState {
-  worktreePath: string;
-  targetHost: string;
-  ports: number[];
-  status: "active" | "inactive";
-  caddyServerIds: string[];
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface PortMapping {
-  localPort: number;
-  targetPort: number;
-  service?: string;
-}

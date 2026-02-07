@@ -1,40 +1,39 @@
 import { Action, ActionPanel, Icon, List } from "@raycast/api";
-import { useMemo, useEffect } from "react";
+import { useMemo, useEffect, useState } from "react";
 import { useProjects } from "#/hooks/use-projects";
 import { Worktree } from "./components/worktree";
 import type { Worktree as WorktreeType } from "./config/types";
-import useProcessStore from "#/stores/process-store";
-import { cleanupOrphanedProcesses } from "#/helpers/process";
+import { listServers, type ServerInfo } from "#/helpers/wt-serve-client";
 
 export default function Command() {
   const { projects: incomingProjects, isLoadingProjects, revalidateProjects } = useProjects();
+  const [servers, setServers] = useState<ServerInfo[]>([]);
 
-  // Clean up orphaned processes and restore running ones on mount
   useEffect(() => {
-    cleanupOrphanedProcesses().catch(() => {
-      // Silent error
-    });
+    let active = true;
+    const poll = async () => {
+      try {
+        const list = await listServers();
+        if (active) setServers(list);
+      } catch {
+        if (active) setServers([]);
+      }
+    };
+    poll();
+    const interval = setInterval(poll, 3000);
+    return () => { active = false; clearInterval(interval); };
   }, []);
 
-  // Get the running processes map directly from the store
-  const runningProcessesMap = useProcessStore((state) => state.runningProcesses);
+  const runningPaths = useMemo(() => new Set(servers.filter((s) => s.status === "running").map((s) => s.worktreePath)), [servers]);
 
   const runningWorktrees = useMemo(() => {
     if (!incomingProjects) return [];
-
-    const allWorktrees = incomingProjects.flatMap((project) =>
-      project.worktrees.map((worktree) => ({
-        ...worktree,
-        project,
-      })),
+    return incomingProjects.flatMap((project) =>
+      project.worktrees
+        .filter((wt) => runningPaths.has(wt.path))
+        .map((wt) => ({ ...wt, project })),
     );
-
-    // Filter to only worktrees with running dev servers
-    return allWorktrees.filter((worktree) => {
-      const runningProcess = runningProcessesMap.get(worktree.path);
-      return runningProcess && runningProcess.info.status === "running";
-    });
-  }, [incomingProjects, runningProcessesMap]);
+  }, [incomingProjects, runningPaths]);
 
   if (runningWorktrees.length === 0 && !isLoadingProjects) {
     return (
@@ -71,7 +70,6 @@ export default function Command() {
   );
 }
 
-// Custom item component for switch dev servers with proxy toggle as primary action
 function SwitchDevServerItem({
   worktree,
   project,
@@ -87,7 +85,6 @@ function SwitchDevServerItem({
       project={project}
       worktree={worktree}
       revalidateProjects={revalidateProjects}
-      customPrimaryAction="proxy"
     />
   );
 }

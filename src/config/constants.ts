@@ -17,7 +17,3 @@ export const DEV_SERVER_SUCCESS_MESSAGE = "All apps are now running";
 export const DEV_SERVER_TIMEOUT_MS = 60000; // 60 seconds default
 export const DEV_SERVER_TIMEOUT_MS_MONOREPO = 120000; // 120 seconds for monorepos
 
-// Proxy server constants
-export const PROXY_ADMIN_PORT = 2019;
-export const PROXY_CONFIG_PATH = "/tmp/raycast-proxy-config.json";
-export const PROXY_STATE_KEY = "proxy-states";
