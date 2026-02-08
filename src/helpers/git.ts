@@ -353,8 +353,15 @@ export const runSetupScript = async (worktreePath: string) => {
 
   if (!setupScript) return;
 
+  const userShell = process.env.SHELL || "/bin/zsh";
+  const profileSource = userShell.includes("zsh")
+    ? "[ -f ~/.zshenv ] && source ~/.zshenv; [ -f ~/.zshrc ] && source ~/.zshrc; "
+    : userShell.includes("bash")
+      ? "[ -f ~/.bash_profile ] && source ~/.bash_profile; [ -f ~/.bashrc ] && source ~/.bashrc; "
+      : "";
+
   try {
-    await executeCommand(setupScript, { cwd: worktreePath });
+    await executeCommand(`${profileSource}${setupScript}`, { cwd: worktreePath, shell: userShell });
   } catch (e: unknown) {
     throw Error(`Setup script failed: ${e instanceof Error ? e.message : "Unknown error occurred"}`);
   }
