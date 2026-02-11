@@ -17,6 +17,7 @@ import {
   getCurrentCommit,
   getRemoteBranches,
   pullBranchChanges,
+  runSetupScript,
   shouldPushWorktree,
 } from "./helpers/git";
 import { getPreferences, resizeEditorWindow } from "./helpers/raycast";
@@ -152,6 +153,14 @@ export default function Command({ directory: initialDirectory }: { directory?: s
 
         // Revalidate projects after cache update to ensure the list is refreshed
         revalidateProjects();
+
+        runSetupScript(newWorktreePath).catch((e) => {
+          showToast({
+            style: Toast.Style.Failure,
+            title: "Setup Script Failed",
+            message: e instanceof Error ? e.message : "Unknown error",
+          });
+        });
 
         toast.style = Toast.Style.Success;
         toast.title = "Worktree Created";

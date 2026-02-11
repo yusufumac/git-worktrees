@@ -14,6 +14,7 @@ import {
   checkIfBranchExistsOnRemote,
   fetch,
   getCurrentCommit,
+  runSetupScript,
   shouldPushWorktree,
 } from "./helpers/git";
 import { fetchLinearIssues, LinearIssue } from "./helpers/linear";
@@ -168,6 +169,14 @@ export default function Command() {
 
       // Revalidate projects after cache update
       revalidateProjects();
+
+      runSetupScript(newWorktreePath).catch((e) => {
+        showToast({
+          style: Toast.Style.Failure,
+          title: "Setup Script Failed",
+          message: e instanceof Error ? e.message : "Unknown error",
+        });
+      });
 
       toast.style = Toast.Style.Success;
       toast.title = "Worktree Created";

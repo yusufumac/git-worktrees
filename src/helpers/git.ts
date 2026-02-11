@@ -379,9 +379,6 @@ export const addRemoteWorktree = async ({
   try {
     const worktreeAddCommand = `git -C ${parentPath} worktree add --track -B ${remoteBranch} ${newWorktreePath} origin/${remoteBranch}`;
     await executeCommand(worktreeAddCommand);
-
-    // Run setup script after creating worktree
-    await runSetupScript(newWorktreePath);
   } catch (e: unknown) {
     throw Error(e instanceof Error ? e.message : "Unknown error occurred");
   }
@@ -434,9 +431,6 @@ export const addNewWorktree = async ({
     const addCommand = `git -C ${parentPath} worktree add --track -B ${newBranch} ${newWorktreePath} origin/${trackingBranch}`;
 
     await executeCommand(addCommand);
-
-    // Run setup script after creating worktree
-    await runSetupScript(newWorktreePath);
   } catch (e: unknown) {
     throw Error(e instanceof Error ? e.message : "Unknown error occurred");
   }
