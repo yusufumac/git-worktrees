@@ -387,6 +387,38 @@ export const addRemoteWorktree = async ({
   }
 };
 
+export type PullRequest = {
+  number: number;
+  state: "OPEN" | "MERGED" | "CLOSED";
+  url: string;
+};
+
+const GH_EXEC_ENV = {
+  env: {
+    ...process.env,
+    PATH: `/usr/bin:/usr/local/bin:/opt/homebrew/bin:${process.env.PATH ?? ""}`,
+  },
+};
+
+export const getPullRequest = async ({
+  path: cwd,
+  branch,
+}: {
+  path: string;
+  branch: string;
+}): Promise<PullRequest | undefined> => {
+  const args = `pr list --head ${branch} --state all --json number,state,url --limit 1`;
+  try {
+    const { stdout } = await executeCommand(`gh ${args}`, { cwd, ...GH_EXEC_ENV }).catch(() =>
+      executeCommand(`/opt/homebrew/bin/gh ${args}`, { cwd, ...GH_EXEC_ENV }),
+    );
+    const results = JSON.parse(stdout.trim()) as PullRequest[];
+    return results[0];
+  } catch {
+    return undefined;
+  }
+};
+
 export const addNewWorktree = async ({
   newBranch,
   newWorktreePath,

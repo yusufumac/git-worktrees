@@ -1,30 +1,31 @@
 import { isWorktreeDirty } from "#/helpers/file";
-import { getCurrentCommit } from "#/helpers/git";
-import { useCachedPromise, withCache } from "@raycast/utils";
+import { getCurrentCommit, getPullRequest } from "#/helpers/git";
+import { useCachedPromise } from "@raycast/utils";
 
-const getBranchInformation = async (path: string) => {
-  const [isDirty, commit] = await Promise.all([isWorktreeDirty(path), getCurrentCommit({ path })]);
+const getBranchInformation = async (path: string, branch: string) => {
+  const [isDirty, commit, pr] = await Promise.all([
+    isWorktreeDirty(path),
+    getCurrentCommit({ path }),
+    getPullRequest({ path, branch }).catch(() => undefined),
+  ]);
 
-  return { isDirty, commit: commit ?? undefined };
+  return { isDirty, commit: commit ?? undefined, pr };
 };
 
-const cachedGetBranchInformation = withCache(getBranchInformation, {
-  maxAge: 30 * 1000, // 30 seconds
-});
-
-export const useBranchInformation = ({ path }: { path: string }) => {
-  const { data, isLoading, revalidate } = useCachedPromise(
-    (path, _) => cachedGetBranchInformation(path),
-    [path, "branch-information"],
+export const useBranchInformation = ({ path, branch }: { path: string; branch?: string | null }) => {
+  const { data, isLoading } = useCachedPromise(
+    (path, branch) => getBranchInformation(path, branch),
+    [path, branch ?? ""],
     {
       keepPreviousData: true,
-      execute: false,
+      execute: !!branch,
     },
   );
 
   return {
-    ...data,
+    isDirty: data?.isDirty,
+    commit: data?.commit,
+    pr: data?.pr,
     isLoadingBranchInformation: isLoading,
-    revalidateBranchInformation: revalidate,
   };
 };
