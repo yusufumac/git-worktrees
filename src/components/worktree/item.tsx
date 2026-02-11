@@ -42,12 +42,12 @@ export const Item = memo(
     const { projectsPath } = getPreferences();
     const gitRemote = project?.gitRemotes?.[0];
 
-    const branchInformation = useBranchInformation({ path: worktree.path });
+    const { isDirty, commit, pr } = useBranchInformation({ path: worktree.path, branch: worktree.branch });
     const { isRunning, processInfo, host } = useDevServer(worktree.path);
     const isProxying = processInfo?.proxy?.status === "active";
 
-    const isDirty = branchInformation.isDirty === undefined ? worktree.dirty : branchInformation.isDirty;
-    const currentCommit = branchInformation.commit === undefined ? worktree.commit : branchInformation.commit;
+    const currentDirty = isDirty ?? worktree.dirty;
+    const currentCommit = commit ?? worktree.commit;
 
     return (
       <List.Item
@@ -80,7 +80,19 @@ export const Item = memo(
                 },
               ]
             : []),
-          ...(isDirty ? [{ text: { value: "U", color: Color.Yellow }, tooltip: "Unsaved Changes" }] : []),
+          ...(currentDirty ? [{ text: { value: "U", color: Color.Yellow }, tooltip: "Unsaved Changes" }] : []),
+          ...(pr && pr.state !== "CLOSED"
+            ? [
+                {
+                  icon: {
+                    source: pr.state === "OPEN" ? "git-pull-request.svg" : "git-merge.svg",
+                    tintColor: pr.state === "OPEN" ? Color.Green : Color.Purple,
+                  },
+                  text: { value: `#${pr.number}`, color: pr.state === "OPEN" ? Color.Green : Color.Purple },
+                  tooltip: `PR #${pr.number} (${pr.state === "OPEN" ? "Open" : "Merged"})`,
+                },
+              ]
+            : []),
           ...(gitRemote?.icon ? [{ icon: gitRemote.icon, tooltip: gitRemote.host }] : []),
         ]}
         actions={
@@ -93,6 +105,14 @@ export const Item = memo(
                 }}
               />
               <OpenTerminal path={worktree.path} />
+              {pr?.url && (
+                <Action.OpenInBrowser
+                  url={pr.url}
+                  title="Open Pull Request"
+                  icon={{ source: "git-pull-request.svg" }}
+                  shortcut={{ modifiers: ["cmd", "shift"], key: "p" }}
+                />
+              )}
               <CopyPath path={worktree.path} />
 
               <RunDevServer
