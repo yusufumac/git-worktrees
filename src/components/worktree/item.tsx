@@ -67,7 +67,7 @@ export const Item = memo(
           ...(isProxying
             ? [
                 {
-                  text: { value: "localhost", color: Color.Green },
+                  icon: { source: Icon.Globe, tintColor: Color.Green },
                   tooltip: "Proxied to localhost",
                 },
               ]
