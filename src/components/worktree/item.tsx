@@ -61,7 +61,15 @@ export const Item = memo(
             ? worktree.path.slice(basePath.length + 1) // +1 to skip the '/'
             : relative(basePath, worktree.path);
         })()}
-        subtitle={`${worktree.branch ?? "detached"} @ ${currentCommit?.slice(0, 7) ?? "none"}`}
+        subtitle={(() => {
+          const basePath = project?.fullPath ?? projectsPath;
+          const worktreeName = worktree.path.toLowerCase().startsWith(basePath.toLowerCase())
+            ? worktree.path.slice(basePath.length + 1)
+            : relative(basePath, worktree.path);
+          const branch = worktree.branch ?? "detached";
+          const commit = currentCommit?.slice(0, 7) ?? "none";
+          return branch === worktreeName ? commit : `${branch} @ ${commit}`;
+        })()}
         keywords={worktree.branch ? worktree.branch.split("-") : []}
         accessories={[
           ...(isProxying
@@ -80,7 +88,6 @@ export const Item = memo(
                 },
               ]
             : []),
-          ...(currentDirty ? [{ text: { value: "U", color: Color.Yellow }, tooltip: "Unsaved Changes" }] : []),
           ...(pr && pr.state !== "CLOSED"
             ? [
                 {
@@ -93,6 +100,7 @@ export const Item = memo(
                 },
               ]
             : []),
+          ...(currentDirty ? [{ text: { value: "U", color: Color.Yellow }, tooltip: "Unsaved Changes" }] : []),
           ...(gitRemote?.icon ? [{ icon: gitRemote.icon, tooltip: gitRemote.host }] : []),
         ]}
         actions={
