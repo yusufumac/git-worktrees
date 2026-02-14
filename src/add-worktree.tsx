@@ -154,7 +154,7 @@ export default function Command({ directory: initialDirectory }: { directory?: s
         // Revalidate projects after cache update to ensure the list is refreshed
         revalidateProjects();
 
-        runSetupScript(newWorktreePath).catch((e) => {
+        await runSetupScript(newWorktreePath).catch((e) => {
           showToast({
             style: Toast.Style.Failure,
             title: "Setup Script Failed",

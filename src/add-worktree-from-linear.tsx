@@ -170,7 +170,7 @@ export default function Command() {
       // Revalidate projects after cache update
       revalidateProjects();
 
-      runSetupScript(newWorktreePath).catch((e) => {
+      await runSetupScript(newWorktreePath).catch((e) => {
         showToast({
           style: Toast.Style.Failure,
           title: "Setup Script Failed",
