@@ -47,7 +47,6 @@ export const RemoveWorktree = ({
         toast.title = "Stopping Dev Server";
         toast.message = "Stopping the dev server before removing the worktree";
         await stopServer(worktree.path);
-        await new Promise((resolve) => setTimeout(resolve, 500));
       }
     } catch {
       // No server running, continue
