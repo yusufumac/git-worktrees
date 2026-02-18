@@ -81,7 +81,7 @@ export interface LogEntry {
 export async function startServer(opts: {
   worktreePath: string;
 }): Promise<StartResult> {
-  const { data } = await request("POST", "/servers", opts);
+  const { data } = await request("POST", "/servers", { ...opts, proxy: true });
   return data;
 }
 

@@ -3,7 +3,7 @@ import { CACHE_KEYS } from "#/config/constants";
 import { BareRepository, Project, Worktree } from "#/config/types";
 import { Cache } from "@raycast/api";
 import fg from "fast-glob";
-import { statSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { getDataFromCache, storeDataInCache } from "./cache";
@@ -101,7 +101,7 @@ export const getRepoWorktrees = async (bareDirectory: string): Promise<Worktree[
         dirty: false,
       };
     })
-    .filter(({ path }) => !path.endsWith(".bare") && path.toLowerCase().startsWith(bareDirectory.toLowerCase()));
+    .filter(({ path }) => !path.endsWith(".bare") && path.toLowerCase().startsWith(bareDirectory.toLowerCase()) && existsSync(path));
 
   return batchPromises(worktrees, 25, async (worktree) => ({
     ...worktree,
