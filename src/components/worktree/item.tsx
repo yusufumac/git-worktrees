@@ -14,7 +14,7 @@ import { getPreferences } from "#/helpers/raycast";
 import { enableProxy, disableProxy } from "#/helpers/wt-serve-client";
 import { useBranchInformation } from "#/hooks/use-branch-information";
 import { useDevServer } from "#/hooks/use-dev-server";
-import { Action, ActionPanel, Color, Icon, List, showToast, Toast } from "@raycast/api";
+import { Action, ActionPanel, Color, Icon, LaunchType, List, showToast, Toast, launchCommand } from "@raycast/api";
 import { relative } from "node:path";
 import { memo } from "react";
 import AddWorktree from "../../add-worktree";
@@ -143,6 +143,7 @@ export const Item = memo(
                         await enableProxy(worktree.path);
                         await showToast({ style: Toast.Style.Success, title: "Proxy Enabled" });
                       }
+                      launchCommand({ name: "running-worktrees", type: LaunchType.Background }).catch(() => {});
                     } catch (err) {
                       await showToast({
                         style: Toast.Style.Failure,
