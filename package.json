@@ -61,6 +61,13 @@
       "subtitle": "Git Worktrees",
       "description": "Switch localhost proxy between running dev servers",
       "mode": "view"
+    },
+    {
+      "name": "running-worktrees",
+      "title": "Running Worktrees",
+      "subtitle": "Git Worktrees",
+      "description": "Menu bar indicator for running worktree dev servers with proxy switching",
+      "mode": "menu-bar"
     }
   ],
   "preferences": [
