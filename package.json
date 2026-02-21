@@ -282,6 +282,14 @@
       "placeholder": "pnpm install"
     },
     {
+      "type": "textfield",
+      "name": "previewUrl",
+      "title": "Preview URL",
+      "description": "URL template with {host} placeholder, e.g. https://example.com?dev_host={host}",
+      "required": false,
+      "placeholder": "https://example.com?dev_host={host}"
+    },
+    {
       "type": "password",
       "name": "linearApiKey",
       "title": "Linear API Key",

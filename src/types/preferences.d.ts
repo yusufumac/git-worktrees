@@ -16,4 +16,5 @@ declare interface Preferences {
   branchPrefixesToRemove?: string;
   setupScript?: string;
   shouldAutomaticallyOpenWorktree?: boolean;
+  previewUrl?: string;
 }

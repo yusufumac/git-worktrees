@@ -1,6 +1,7 @@
 import ClearCache from "#/components/actions/clear-cache";
 import { CopyPath } from "#/components/actions/copy-path";
 import { OpenEditor } from "#/components/actions/open-editor";
+import { OpenPreviewUrl } from "#/components/actions/open-preview-url";
 import { OpenTerminal } from "#/components/actions/open-terminal";
 import { RefreshWorktrees } from "#/components/actions/refresh-worktrees";
 import { RemoveProject } from "#/components/actions/remove-project";
@@ -128,6 +129,8 @@ export const Item = memo(
                 onProcessStart={revalidateProjects}
                 onProcessStop={revalidateProjects}
               />
+
+              {isRunning && <OpenPreviewUrl host={host} />}
 
               {isRunning && (
                 <Action
