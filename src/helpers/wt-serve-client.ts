@@ -121,3 +121,8 @@ export async function health(): Promise<{ status: string; serverCount: number }>
   const { data } = await request("GET", "/health");
   return data;
 }
+
+export async function runSetup(worktreePath: string): Promise<{ ok?: boolean; error?: string }> {
+  const { data } = await request("POST", "/setup", { worktreePath });
+  return data;
+}

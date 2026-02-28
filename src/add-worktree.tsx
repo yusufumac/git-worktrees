@@ -17,9 +17,9 @@ import {
   getCurrentCommit,
   getRemoteBranches,
   pullBranchChanges,
-  runSetupScript,
   shouldPushWorktree,
 } from "./helpers/git";
+import { runSetup } from "./helpers/wt-serve-client";
 import { getPreferences, resizeEditorWindow } from "./helpers/raycast";
 
 enum WorktreeFlowType {
@@ -154,7 +154,7 @@ export default function Command({ directory: initialDirectory }: { directory?: s
         // Revalidate projects after cache update to ensure the list is refreshed
         revalidateProjects();
 
-        await runSetupScript(newWorktreePath).catch((e) => {
+        runSetup(newWorktreePath).catch((e) => {
           showToast({
             style: Toast.Style.Failure,
             title: "Setup Script Failed",

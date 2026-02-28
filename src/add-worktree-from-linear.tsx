@@ -14,9 +14,9 @@ import {
   checkIfBranchExistsOnRemote,
   fetch,
   getCurrentCommit,
-  runSetupScript,
   shouldPushWorktree,
 } from "./helpers/git";
+import { runSetup } from "./helpers/wt-serve-client";
 import { fetchLinearIssues, LinearIssue } from "./helpers/linear";
 import { getPreferences, resizeEditorWindow } from "./helpers/raycast";
 
@@ -170,7 +170,7 @@ export default function Command() {
       // Revalidate projects after cache update
       revalidateProjects();
 
-      await runSetupScript(newWorktreePath).catch((e) => {
+      runSetup(newWorktreePath).catch((e) => {
         showToast({
           style: Toast.Style.Failure,
           title: "Setup Script Failed",

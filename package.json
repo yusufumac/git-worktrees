@@ -274,15 +274,6 @@
     },
     {
       "type": "textfield",
-      "name": "setupScript",
-      "title": "Setup Script",
-      "description": "Command to run after creating a worktree (e.g., 'pnpm install', 'npm ci', 'yarn install')",
-      "required": false,
-      "default": "",
-      "placeholder": "pnpm install"
-    },
-    {
-      "type": "textfield",
       "name": "previewUrl",
       "title": "Preview URL",
       "description": "URL template with {host} placeholder, e.g. https://example.com?dev_host={host}",

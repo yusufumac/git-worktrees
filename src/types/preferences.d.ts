@@ -14,7 +14,7 @@ declare interface Preferences {
   resizeEditorWindowAfterLaunch?: boolean;
   windowResizeMode?: string;
   branchPrefixesToRemove?: string;
-  setupScript?: string;
+
   shouldAutomaticallyOpenWorktree?: boolean;
   previewUrl?: string;
 }
