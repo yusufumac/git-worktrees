@@ -408,7 +408,7 @@ export const addNewWorktree = async ({
   parentPath: string;
 }) => {
   try {
-    const addCommand = `git -C ${parentPath} worktree add --track -B ${newBranch} ${newWorktreePath} origin/${trackingBranch}`;
+    const addCommand = `git -C ${parentPath} worktree add --no-track -B ${newBranch} ${newWorktreePath} origin/${trackingBranch}`;
 
     await executeCommand(addCommand);
   } catch (e: unknown) {
