@@ -290,7 +290,7 @@
     }
   ],
   "dependencies": {
-    "@raycast/api": "^1.94.3",
+    "@raycast/api": "^1.104.19",
     "@raycast/utils": "^1.19.1",
     "fast-glob": "^3.3.3",
     "find-process": "^2.0.0",
