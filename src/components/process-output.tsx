@@ -1,4 +1,4 @@
-import { Detail, ActionPanel, Action, Icon } from "@raycast/api";
+import { Detail, ActionPanel, Action, Icon, Clipboard, showToast, Toast } from "@raycast/api";
 import { useState, useEffect, useRef } from "react";
 import { getLogs, stopServer } from "#/helpers/wt-serve-client";
 import stripAnsi from "strip-ansi";
@@ -35,7 +35,10 @@ export const ProcessOutputView = ({ worktreePath, onClose }: ProcessOutputViewPr
 
     poll();
     const interval = setInterval(poll, 500);
-    return () => { active = false; clearInterval(interval); };
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
   }, [worktreePath]);
 
   const handleStop = async () => {
@@ -43,15 +46,14 @@ export const ProcessOutputView = ({ worktreePath, onClose }: ProcessOutputViewPr
     setProcessStatus("stopped");
   };
 
-  const handleCopyOutput = () => {
-    const outputText = output.join("\n");
-    navigator.clipboard.writeText(outputText);
-  };
+  const cleanLine = (line: string) => stripAnsi(line.replace(/^\[(stdout|stderr)\] /, ""));
 
-  const processedOutput = output.slice(-DISPLAY_LINES).map((line) => {
-    const cleanLine = line.replace(/^\[(stdout|stderr)\] /, "");
-    return stripAnsi(cleanLine);
-  });
+  const processedOutput = output.slice(-DISPLAY_LINES).map(cleanLine);
+
+  const handleCopyOutput = async () => {
+    await Clipboard.copy(processedOutput.join("\n"));
+    await showToast({ style: Toast.Style.Success, title: "Output Copied" });
+  };
 
   const markdown = `\`\`\`
 ${processedOutput.join("\n") || "Waiting for output..."}
