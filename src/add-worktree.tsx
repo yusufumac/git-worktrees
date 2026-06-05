@@ -269,6 +269,17 @@ export default function Command({ directory: initialDirectory }: { directory?: s
       }
       enableDrafts={!initialDirectory}
     >
+      {values.branch === WorktreeFlowType.CREATE_NEW && (
+        <Form.TextField
+          title="Worktree Name"
+          placeholder="feature/my-new-feature"
+          info="Name for the new branch and worktree"
+          {...itemProps.worktreeName}
+          onChange={handleWorktreeNameOnChange}
+          autoFocus
+        />
+      )}
+
       <Form.Dropdown
         title="Project"
         info="Select a project to add a worktree to"
@@ -309,17 +320,6 @@ export default function Command({ directory: initialDirectory }: { directory?: s
           </>
         )}
       </Form.Dropdown>
-
-      {values.branch === WorktreeFlowType.CREATE_NEW && (
-        <Form.TextField
-          title="Worktree Name"
-          placeholder="feature/my-new-feature"
-          info="Name for the new branch and worktree"
-          {...itemProps.worktreeName}
-          onChange={handleWorktreeNameOnChange}
-          autoFocus={!!initialDirectory}
-        />
-      )}
 
       <Form.Dropdown
         title="Tracking Branch"
